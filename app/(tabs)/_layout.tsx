@@ -3,7 +3,7 @@ import { Tabs } from "expo-router";
 
 export default function TabLayout() {
   return (
-    <Tabs screenOptions={{ tabBarActiveTintColor: "blue" }}>
+    <Tabs screenOptions={{ tabBarActiveTintColor: "white" }}>
       <Tabs.Screen
         name="index"
         options={{
@@ -19,6 +19,15 @@ export default function TabLayout() {
           title: "Search",
           tabBarIcon: ({ color }) => (
             <Ionicons name="search-outline" size={28} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="aichat"
+        options={{
+          title: "Chat",
+          tabBarIcon: ({ color }) => (
+            <Ionicons name="chatbox-outline" size={28} color={color} />
           ),
         }}
       />
