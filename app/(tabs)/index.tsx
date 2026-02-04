@@ -1,32 +1,25 @@
-import { View, Text, StyleSheet } from 'react-native';
-import { auth } from '../../src/config/firebase';
+import { onAuthStateChanged, User } from "firebase/auth";
+import { useEffect, useState } from "react";
+import { Text, View } from "react-native";
+import { auth } from "../../src/config/firebase";
 
 export default function HomeScreen() {
-  // Accessing the global auth state directly
-  const user = auth.currentUser;
+  const [user, setUser] = useState<User | null>(auth.currentUser);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (u) => {
+      setUser(u);
+    });
+
+    return unsubscribe;
+  }, []);
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Welcome Home</Text>
-      <Text style={styles.subtitle}>Logged in as: {user?.email}</Text>
+    <View className="flex-1 items-center justify-center bg-white">
+      <Text className="mb-2.5 text-2xl font-bold">Welcome Home</Text>
+      <Text className="text-base text-neutral-600">
+        Logged in as: {user?.email ?? "Loading..."}
+      </Text>
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 10,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: '#666',
-  },
-});
