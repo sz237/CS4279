@@ -48,3 +48,11 @@ Join our community of developers creating universal apps.
 
 - [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
 - [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+
+## After Firebase
+
+Run git pull
+Run npm install (install packages/modules)
+Create .env in top-level directory with keys
+Work within tabs directory
+Add screen (layout.tsx)
