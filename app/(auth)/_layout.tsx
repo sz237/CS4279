@@ -1,23 +1,26 @@
-import React, { useState } from 'react';
-import { ScrollView, View } from 'react-native';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Text } from '@/components/ui/text';
-import { SocialConnections } from '@/components/social-connections';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Text } from "@/components/ui/text";
+import React, { useState } from "react";
+import { ScrollView, View } from "react-native";
 
 // Import your screen components
-import LoginScreen from './login';
-import SignUpScreen from './signup';
+import LoginScreen from "./login";
+import SignUpScreen from "./signup";
 
 export default function AuthLayout() {
-  const [activeTab, setActiveTab] = useState('signin');
+  const [activeTab, setActiveTab] = useState("signin");
 
   return (
-    <ScrollView 
-      className="flex-1 bg-background" 
-      contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: 24 }}
+    <ScrollView
+      className="flex-1 bg-background"
+      contentContainerStyle={{
+        flexGrow: 1,
+        justifyContent: "center",
+        padding: 24,
+      }}
     >
       <View className="items-center mb-10">
-        <Text className="text-4xl font-bold text-foreground">App Name</Text>
+        <Text className="text-4xl font-bold text-foreground">Nomad</Text>
       </View>
 
       <Tabs
@@ -36,14 +39,14 @@ export default function AuthLayout() {
 
         <TabsContent value="signin">
           {/* Render the Login logic directly */}
-          <LoginScreen onSwitchToSignUp={() => setActiveTab('signup')} />
+          <LoginScreen onSwitchToSignUp={() => setActiveTab("signup")} />
         </TabsContent>
 
         <TabsContent value="signup">
           {/* Render the SignUp logic directly */}
-          <SignUpScreen onSwitchToLogin={() => setActiveTab('signin')} />
+          <SignUpScreen onSwitchToLogin={() => setActiveTab("signin")} />
         </TabsContent>
-      </Tabs> 
+      </Tabs>
     </ScrollView>
   );
 }
