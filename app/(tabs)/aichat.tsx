@@ -1,116 +1,106 @@
-import { useState } from "react";
-import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
-import { auth } from "../../src/config/firebase";
+import { useMemo, useState } from "react";
+import { FlatList, KeyboardAvoidingView, Platform, Pressable, Text, TextInput, View } from "react-native";
+import { chat } from "../../lib/api";
 
-const GEMINI_API_KEY: string = process.env.EXPO_PUBLIC_geminiApiKey ?? "";
-const GEMINI_MODEL = "gemini-2.5-flash";
-const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${encodeURIComponent(GEMINI_API_KEY)}`;
+type Msg = { id: string; role: "user" | "assistant"; content: string };
 
-export default function ChatScreen() {
-  const user = auth.currentUser;
+export default function AiChatScreen() {
+  const [input, setInput] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [messages, setMessages] = useState<Msg[]>([
+    {
+      id: "welcome",
+      role: "assistant",
+      content: "Hi — tell me where you’re traveling and what you want to do (food, museums, nature, nightlife, budget).",
+    },
+  ]);
 
-  const [query, setQuery] = useState("restaurants near Nashville");
-  const [answer, setAnswer] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | undefined>(undefined);
+  const apiMessages = useMemo(
+    () => messages.map((m) => ({ role: m.role, content: m.content })),
+    [messages]
+  );
 
-  async function runSearch() {
-    if (!GEMINI_API_KEY) {
-      setError("Gemini API key missing. Add EXPO_PUBLIC_geminiApiKey to .env");
-      return;
-    }
+  async function send() {
+    const text = input.trim();
+    if (!text || busy) return;
+
+    const userMsg: Msg = { id: String(Date.now()), role: "user", content: text };
+    setMessages((prev) => [userMsg, ...prev]);
+    setInput("");
+    setBusy(true);
 
     try {
-      setLoading(true);
-      setError(undefined);
-      setAnswer("");
-
-      const body = {
-        contents: [
-          {
-            parts: [
-              {
-                text: `Give a concise answer (max 80 words) to: ${query}`,
-              },
-            ],
-          },
-        ],
-      };
-
-      const res = await fetch(GEMINI_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+      const res = await chat(apiMessages.concat([{ role: "user", content: text }]), {
+        product: "Nomad",
+        goal: "travel planning",
       });
 
-      if (!res.ok) {
-        const msg = await res.text();
-        throw new Error(`Request failed: ${res.status} ${msg}`);
-      }
-
-      const data = await res.json();
-      const text =
-        data?.candidates?.[0]?.content?.parts
-          ?.map((p: { text?: string }) => p.text ?? "")
-          .join("\n")
-          .trim() ?? "";
-
-      setAnswer(text || "No answer returned.");
+      const botMsg: Msg = { id: String(Date.now() + 1), role: "assistant", content: res.reply };
+      setMessages((prev) => [botMsg, ...prev]);
     } catch (e: any) {
-      setError(e?.message ?? "Unknown error");
+      const botMsg: Msg = {
+        id: String(Date.now() + 2),
+        role: "assistant",
+        content: `Error contacting backend: ${e?.message || String(e)}`,
+      };
+      setMessages((prev) => [botMsg, ...prev]);
     } finally {
-      setLoading(false);
+      setBusy(false);
     }
   }
 
   return (
-    <ScrollView
-      className="flex-1 bg-white px-5 pt-10"
-      keyboardShouldPersistTaps="handled"
-    >
-      <Text className="text-2xl font-bold">Gemini Search</Text>
-      <Text className="mt-1 text-sm text-neutral-600">
-        Logged in as: {user?.email ?? "Unknown"}
-      </Text>
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+      <View style={{ flex: 1, padding: 16 }}>
+        <Text style={{ fontSize: 22, fontWeight: "700", marginBottom: 12 }}>AI Chat (Mistral via Ollama)</Text>
 
-      <Text className="mt-6 text-sm font-medium text-neutral-800">
-        What do you want to ask?
-      </Text>
-      <TextInput
-        value={query}
-        onChangeText={setQuery}
-        placeholder="Ask Gemini anything..."
-        className="mt-2 rounded-2xl border border-neutral-200 px-4 py-3 text-base"
-        editable={!loading}
-      />
+        <FlatList
+          data={messages}
+          inverted
+          keyExtractor={(item) => item.id}
+          renderItem={({ item }) => (
+            <View
+              style={{
+                alignSelf: item.role === "user" ? "flex-end" : "flex-start",
+                backgroundColor: item.role === "user" ? "#DCFCE7" : "#E5E7EB",
+                padding: 12,
+                borderRadius: 12,
+                marginBottom: 10,
+                maxWidth: "90%",
+              }}
+            >
+              <Text style={{ fontSize: 15 }}>{item.content}</Text>
+            </View>
+          )}
+        />
 
-      <Pressable
-        onPress={runSearch}
-        disabled={loading}
-        className={`mt-4 rounded-2xl px-4 py-3 ${
-          loading ? "bg-neutral-400" : "bg-black"
-        }`}
-      >
-        <Text className="text-center text-base font-semibold text-white">
-          {loading ? "Searching..." : "Ask Gemini"}
-        </Text>
-      </Pressable>
-
-      {error ? (
-        <Text className="mt-3 text-sm text-red-600">Error: {error}</Text>
-      ) : null}
-
-      {answer ? (
-        <View className="mt-4 rounded-2xl border border-neutral-200 bg-neutral-50 p-4">
-          <Text className="text-sm text-neutral-800">{answer}</Text>
+        <View style={{ flexDirection: "row", gap: 10, alignItems: "center" }}>
+          <TextInput
+            value={input}
+            onChangeText={setInput}
+            placeholder="Ask for an itinerary, food spots, etc."
+            style={{
+              flex: 1,
+              borderWidth: 1,
+              borderColor: "#D1D5DB",
+              borderRadius: 10,
+              paddingHorizontal: 12,
+              paddingVertical: 10,
+            }}
+          />
+          <Pressable
+            onPress={send}
+            style={{
+              paddingVertical: 10,
+              paddingHorizontal: 14,
+              borderRadius: 10,
+              backgroundColor: busy ? "#9CA3AF" : "#111827",
+            }}
+          >
+            <Text style={{ color: "white", fontWeight: "700" }}>{busy ? "..." : "Send"}</Text>
+          </Pressable>
         </View>
-      ) : null}
-
-      {!answer && !error && !loading ? (
-        <Text className="mt-4 text-sm text-neutral-600">
-          No response yet. Enter a question and tap the button above.
-        </Text>
-      ) : null}
-    </ScrollView>
+      </View>
+    </KeyboardAvoidingView>
   );
 }
