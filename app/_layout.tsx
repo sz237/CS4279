@@ -8,6 +8,7 @@ import { PortalHost } from '@rn-primitives/portal';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { useEffect, useState } from 'react';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { auth } from '../src/config/firebase';
 
 export default function RootLayout() {
@@ -40,13 +41,14 @@ export default function RootLayout() {
   }, [user, initializing, segments]);
 
   return (
-    <ThemeProvider value={NAV_THEME[colorScheme]}>
-      <Stack>
-        <Stack.Screen name="(auth)/login" options={{ headerShown: false }} />
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-      </Stack>
-      <PortalHost />
-    </ThemeProvider>
-   
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <ThemeProvider value={NAV_THEME[colorScheme]}>
+        <Stack>
+          <Stack.Screen name="(auth)/login" options={{ headerShown: false }} />
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        </Stack>
+        <PortalHost />
+      </ThemeProvider>
+    </GestureHandlerRootView>
   );
 }

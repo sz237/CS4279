@@ -48,6 +48,16 @@ export default function TabLayout() {
             <Ionicons name="settings" size={28} color={color} />
           ),
         }}
+        /> 
+
+        <Tabs.Screen
+  name="itinerary"
+  options={{
+    title: "Itinerary",
+    tabBarIcon: ({ color }) => (
+      <Ionicons name="map-outline" size={24} color={color} />
+    ),
+  }}
       />
     </Tabs>
   );
