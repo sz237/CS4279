@@ -17,7 +17,7 @@ export type PlaceResult = {
 
 async function textSearchNYC(query: string): Promise<PlaceResult[]> {
   if (!API_KEY) {
-    throw new Error("Missing EXPO_PUBLIC_GOOGLE_PLACES_KEY");
+    throw new Error("EXPO_PUBLIC_googlePlacesApiKey");
   }
 
   const res = await fetch("https://places.googleapis.com/v1/places:searchText", {
