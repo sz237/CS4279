@@ -1,11 +1,5 @@
 import React, { useState, useCallback } from "react";
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  SafeAreaView,
-  StatusBar,
-} from "react-native";
+import { View, Text, TouchableOpacity } from "react-native";
 import DraggableFlatList, {
   RenderItemParams,
   ScaleDecorator,
@@ -90,9 +84,10 @@ const INITIAL_ACTIVITIES: DayActivities = {
   "tue-324": [],
 };
 
-export default function ItineraryScreen() {
+export default function ItineraryTab() {
   const [selectedDayId, setSelectedDayId] = useState(DAYS[0].id);
-  const [activitiesByDay, setActivitiesByDay] = useState<DayActivities>(INITIAL_ACTIVITIES);
+  const [activitiesByDay, setActivitiesByDay] =
+    useState<DayActivities>(INITIAL_ACTIVITIES);
   const [modalVisible, setModalVisible] = useState(false);
 
   const currentActivities = activitiesByDay[selectedDayId] ?? [];
@@ -125,16 +120,7 @@ export default function ItineraryScreen() {
   );
 
   return (
-    <SafeAreaView className="flex-1 bg-gray-50">
-      <StatusBar barStyle="dark-content" />
-
-      {/* Header */}
-      <View className="px-5 pt-2 pb-1">
-        <Text className="text-2xl font-bold text-gray-900">SoCal Road Trip 🌴</Text>
-        <Text className="text-sm text-gray-400 mt-0.5">March 21–25, 2025</Text>
-      </View>
-
-      {/* Day Tabs */}
+    <View className="flex-1 bg-gray-50">
       <DayTabs
         days={DAYS}
         selectedDayId={selectedDayId}
@@ -149,7 +135,6 @@ export default function ItineraryScreen() {
         </Text>
       </View>
 
-      {/* Activity List */}
       <DraggableFlatList
         data={currentActivities}
         keyExtractor={(item) => item.id}
@@ -167,7 +152,7 @@ export default function ItineraryScreen() {
             </Text>
           </View>
         }
-        ListFooterComponent={<View className="h-4" />}
+        ListFooterComponent={<View className="h-6" />}
       />
 
       {/* Add Activity Button */}
@@ -187,6 +172,6 @@ export default function ItineraryScreen() {
         onClose={() => setModalVisible(false)}
         onAdd={handleAddActivity}
       />
-    </SafeAreaView>
+    </View>
   );
 }

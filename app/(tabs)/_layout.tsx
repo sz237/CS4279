@@ -51,13 +51,15 @@ export default function TabLayout() {
         /> 
 
         <Tabs.Screen
-  name="itinerary"
-  options={{
-    title: "Itinerary",
-    tabBarIcon: ({ color }) => (
-      <Ionicons name="map-outline" size={24} color={color} />
-    ),
-  }}
+        name="itinerary"
+        options={{
+          title: "Itinerary",
+          headerShown: false,
+          href: "/(tabs)/itinerary/overview",
+          tabBarIcon: ({ color }) => (
+            <Ionicons name="map-outline" size={24} color={color} />
+          ),
+        }}
       />
     </Tabs>
   );
