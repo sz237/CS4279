@@ -1,14 +1,15 @@
-import React, { useState, useCallback } from "react";
-import { View, Text, TouchableOpacity } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { useCallback, useState } from "react";
+import { Text, TouchableOpacity, View } from "react-native";
 import DraggableFlatList, {
   RenderItemParams,
   ScaleDecorator,
 } from "react-native-draggable-flatlist";
-import { Ionicons } from "@expo/vector-icons";
 
 import ActivityCard, { Activity } from "@/components/itinerary/ActivityCard";
-import DayTabs, { Day } from "@/components/itinerary/DayTabs";
 import AddActivityModal from "@/components/itinerary/AddActivityModal";
+import { Day } from "@/components/itinerary/DayTabs";
+import SheetStickyHeader from "@/components/itinerary/SheetStickyHeader";
 
 const DAYS: Day[] = [
   { id: "sat-321", label: "Sat", dateLabel: "3/21" },
@@ -120,51 +121,59 @@ export default function ItineraryTab() {
   );
 
   return (
-    <View className="flex-1 bg-gray-50">
-      <DayTabs
+    <View style={{ flex: 1 }}>
+
+      {/* ── Section 1: Sticky day-tab header (bg-white, border #E5E7EB) ── */}
+      <SheetStickyHeader
         days={DAYS}
         selectedDayId={selectedDayId}
         onSelectDay={setSelectedDayId}
       />
 
-      {/* Drag hint */}
-      <View className="flex-row items-center px-5 mb-3">
-        <Ionicons name="bulb-outline" size={14} color="#F59E0B" />
-        <Text className="text-xs text-gray-400 ml-1">
-          Long press and drag to reorder activities
-        </Text>
-      </View>
-
-      <DraggableFlatList
-        data={currentActivities}
-        keyExtractor={(item) => item.id}
-        renderItem={renderItem}
-        onDragEnd={handleDragEnd}
-        containerStyle={{ flex: 1 }}
-        ListEmptyComponent={
-          <View className="items-center justify-center py-20">
-            <Ionicons name="map-outline" size={48} color="#E5E7EB" />
-            <Text className="text-gray-400 mt-3 text-base font-medium">
-              No activities yet
-            </Text>
-            <Text className="text-gray-300 text-sm mt-1">
-              Tap "+ Add Activity" to get started
-            </Text>
-          </View>
-        }
-        ListFooterComponent={<View className="h-6" />}
-      />
-
-      {/* Add Activity Button */}
-      <View className="px-4 pb-4 pt-2 bg-gray-50 border-t border-gray-100">
-        <TouchableOpacity
-          onPress={() => setModalVisible(true)}
-          activeOpacity={0.85}
-          className="flex-row items-center justify-center border-2 border-dashed border-gray-300 rounded-2xl py-4"
-        >
-          <Ionicons name="add" size={20} color="#6B7280" />
-          <Text className="text-gray-500 font-semibold ml-1">Add Activity</Text>
-        </TouchableOpacity>
+      {/* ── Section 2: Scrollable activity cards (bg-gray-50 / #F9FAFB) ── */}
+      <View style={{ flex: 1, backgroundColor: "#F9FAFB" }}>
+        <DraggableFlatList
+          data={currentActivities}
+          keyExtractor={(item) => item.id}
+          renderItem={renderItem}
+          onDragEnd={handleDragEnd}
+          containerStyle={{ flex: 1 }}
+          contentContainerStyle={{ paddingTop: 8 }}
+          ListEmptyComponent={
+            <View style={{ alignItems: "center", justifyContent: "center", paddingVertical: 80 }}>
+              <Ionicons name="map-outline" size={48} color="#E5E7EB" />
+              <Text style={{ color: "#9CA3AF", marginTop: 12, fontSize: 16, fontWeight: "500" }}>
+                No activities yet
+              </Text>
+              <Text style={{ color: "#D1D5DB", fontSize: 14, marginTop: 4 }}>
+                Tap "+ Add Activity" to get started
+              </Text>
+            </View>
+          }
+          ListFooterComponent={
+            <View style={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 16 }}>
+              <TouchableOpacity
+                onPress={() => setModalVisible(true)}
+                activeOpacity={0.85}
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  borderWidth: 2,
+                  borderStyle: "dashed",
+                  borderColor: "#D1D5DB",
+                  borderRadius: 16,
+                  paddingVertical: 16,
+                }}
+              >
+                <Ionicons name="add" size={20} color="#6B7280" />
+                <Text style={{ color: "#6B7280", fontWeight: "600", marginLeft: 4 }}>
+                  Add Activity
+                </Text>
+              </TouchableOpacity>
+            </View>
+          }
+        />
       </View>
 
       <AddActivityModal

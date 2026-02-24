@@ -47,7 +47,6 @@ export default function ExploreScreen() {
       <View className="flex-row items-center justify-between px-5 pt-4 pb-2">
         <Text className="text-xl font-bold text-gray-900">Nearby Places</Text>
         <TouchableOpacity activeOpacity={0.7}>
-          <Text className="text-violet-600 font-semibold text-sm">Filter</Text>
         </TouchableOpacity>
       </View>
 
