@@ -2,13 +2,15 @@ import { Ionicons } from "@expo/vector-icons";
 import { useCallback, useMemo, useState } from "react";
 import {
   FlatList,
+  Modal,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from "react-native";
-import { placesTextSearch } from "@/lib/googleplaces";
+import { placeDetails, placesTextSearch } from "@/lib/googleplaces";
 
 type SearchResult = {
   id: string;
@@ -18,6 +20,12 @@ type SearchResult = {
   reviewCount?: number;
 };
 
+type ReviewSnippet = {
+  author?: string;
+  rating?: number;
+  text: string;
+};
+
 export default function SearchScreen() {
   const [location, setLocation] = useState("");
   const [activity, setActivity] = useState("");
@@ -25,6 +33,11 @@ export default function SearchScreen() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
+  const [detailVisible, setDetailVisible] = useState(false);
+  const [detailBusy, setDetailBusy] = useState(false);
+  const [detailError, setDetailError] = useState("");
+  const [selectedPlace, setSelectedPlace] = useState<SearchResult | null>(null);
+  const [reviewSnippets, setReviewSnippets] = useState<ReviewSnippet[]>([]);
 
   const canSearch = useMemo(() => location.trim().length > 0 && !busy, [location, busy]);
 
@@ -63,6 +76,39 @@ export default function SearchScreen() {
       setBusy(false);
     }
   }, [activity, location]);
+
+  const openResultDetails = useCallback(async (item: SearchResult) => {
+    setSelectedPlace(item);
+    setDetailVisible(true);
+    setDetailBusy(true);
+    setDetailError("");
+    setReviewSnippets([]);
+
+    try {
+      const details = await placeDetails(item.id);
+      const sourceReviews =
+        (details.reviews || [])
+          .map((review) => ({
+            author: review.authorAttribution?.displayName,
+            rating: review.rating,
+            text: review.text?.text || "",
+          }))
+          .filter((review) => review.text.trim().length > 0) || [];
+
+      const conciseReviews = sourceReviews
+        .slice(0, 3)
+        .map((review) => ({ ...review, text: review.text }));
+      setReviewSnippets(conciseReviews);
+    } catch (err: any) {
+      setDetailError(err?.message || "Failed to load reviews.");
+    } finally {
+      setDetailBusy(false);
+    }
+  }, []);
+
+  const closeDetails = useCallback(() => {
+    setDetailVisible(false);
+  }, []);
 
   return (
     <View style={styles.screen}>
@@ -124,7 +170,7 @@ export default function SearchScreen() {
             ) : null
           }
           renderItem={({ item }) => (
-            <View style={styles.resultCard}>
+            <Pressable style={styles.resultCard} onPress={() => openResultDetails(item)}>
               <Text style={styles.resultName}>{item.name}</Text>
               {!!item.address && <Text style={styles.resultAddress}>{item.address}</Text>}
               <View style={styles.metaRow}>
@@ -133,7 +179,7 @@ export default function SearchScreen() {
                   {item.rating ?? "—"} ({item.reviewCount ?? 0})
                 </Text>
               </View>
-            </View>
+            </Pressable>
           )}
           ListEmptyComponent={
             <View style={styles.emptyState}>
@@ -146,6 +192,58 @@ export default function SearchScreen() {
           }
         />
       </View>
+
+      <Modal
+        visible={detailVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={closeDetails}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle} numberOfLines={1}>
+                {selectedPlace?.name || "Place details"}
+              </Text>
+              <Pressable onPress={closeDetails} hitSlop={8}>
+                <Ionicons name="close" size={22} color="#6B7280" />
+              </Pressable>
+            </View>
+
+            {!!selectedPlace?.address && (
+              <Text style={styles.modalAddress}>{selectedPlace.address}</Text>
+            )}
+
+            <ScrollView
+              style={styles.modalScroll}
+              contentContainerStyle={styles.modalScrollContent}
+              showsVerticalScrollIndicator={false}
+            >
+              {detailBusy ? (
+                <Text style={styles.modalLoadingText}>Loading reviews...</Text>
+              ) : detailError ? (
+                <Text style={styles.modalErrorText}>{detailError}</Text>
+              ) : (
+                <>
+                  <Text style={styles.modalSectionTitle}>Reviews</Text>
+                  {reviewSnippets.length === 0 ? (
+                    <Text style={styles.modalMuted}>No review text available.</Text>
+                  ) : (
+                    reviewSnippets.map((review, index) => (
+                      <View key={`review-${index}`} style={styles.reviewCard}>
+                        <Text style={styles.reviewMeta}>
+                          {review.author || "Anonymous"} {typeof review.rating === "number" ? `· ${review.rating}/5` : ""}
+                        </Text>
+                        <Text style={styles.reviewText}>{review.text}</Text>
+                      </View>
+                    ))
+                  )}
+                </>
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -276,5 +374,81 @@ const styles = StyleSheet.create({
     color: "#D1D5DB",
     fontSize: 14,
     marginTop: 4,
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(17, 24, 39, 0.45)",
+    justifyContent: "flex-end",
+    padding: 12,
+  },
+  modalCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 20,
+    maxHeight: "80%",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    paddingHorizontal: 14,
+    paddingTop: 12,
+    paddingBottom: 10,
+  },
+  modalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  modalTitle: {
+    flex: 1,
+    fontSize: 17,
+    fontWeight: "700",
+    color: "#111827",
+  },
+  modalAddress: {
+    marginTop: 4,
+    fontSize: 13,
+    color: "#6B7280",
+  },
+  modalScroll: {
+    marginTop: 10,
+  },
+  modalScrollContent: {
+    paddingBottom: 8,
+  },
+  modalSectionTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#111827",
+    marginTop: 6,
+    marginBottom: 6,
+  },
+  modalMuted: {
+    fontSize: 13,
+    color: "#9CA3AF",
+  },
+  modalLoadingText: {
+    fontSize: 14,
+    color: "#6B7280",
+  },
+  modalErrorText: {
+    fontSize: 13,
+    color: "#B91C1C",
+  },
+  reviewCard: {
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    borderRadius: 12,
+    padding: 10,
+    marginBottom: 8,
+    backgroundColor: "#F9FAFB",
+  },
+  reviewMeta: {
+    fontSize: 12,
+    color: "#6B7280",
+    marginBottom: 4,
+  },
+  reviewText: {
+    fontSize: 13,
+    color: "#111827",
+    lineHeight: 18,
   },
 });
