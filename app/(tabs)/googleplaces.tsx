@@ -1,134 +1,246 @@
-import SerpApiCard from "@/components/serpApiCard";
-import React, { useState } from "react";
-import { FlatList, Pressable, Text, View } from "react-native";
-import { auth } from "../../src/config/firebase";
+import * as Linking from "expo-linking";
+import { useState } from "react";
+import { FlatList, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { buildItinerary, summarizeReviews } from "../../lib/api";
+import { placeDetails, placesTextSearch } from "../../lib/googleplaces";
 
-const API_KEY = process.env.EXPO_PUBLIC_googlePlacesApiKey;
-
-export type PlaceResult = {
+type PlaceRow = {
   id: string;
-  displayName?: { text?: string };
-  formattedAddress?: string;
-  location?: { latitude: number; longitude: number };
+  name: string;
+  address?: string;
+  lat?: number;
+  lng?: number;
   rating?: number;
   userRatingCount?: number;
-  types?: string[];
 };
 
-async function textSearchNYC(query: string): Promise<PlaceResult[]> {
-  if (!API_KEY) {
-    throw new Error("Missing EXPO_PUBLIC_GOOGLE_PLACES_KEY");
-  }
+export default function GooglePlacesScreen() {
+  const [query, setQuery] = useState("Things to do in New York City, NYC");
+  const [busy, setBusy] = useState(false);
+  const [results, setResults] = useState<PlaceRow[]>([]);
+  const [selected, setSelected] = useState<any | null>(null);
+  const [summary, setSummary] = useState<any | null>(null);
 
-  const res = await fetch("https://places.googleapis.com/v1/places:searchText", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Goog-Api-Key": API_KEY,
-      // REQUIRED
-      "X-Goog-FieldMask":
-        "places.id,places.displayName,places.formattedAddress,places.rating,places.userRatingCount",
-    },
-    body: JSON.stringify({
-      textQuery: query,
-      maxResultCount: 10,
-      locationBias: {
-        circle: {
-          center: { latitude: 40.7128, longitude: -74.006 },
-          radius: 20000,
-        },
-      },
-      includedType: "tourist_attraction",
-    }),
-  });
-
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Places API error (${res.status}): ${text}`);
-  }
-
-  const data = await res.json();
-  return (data.places ?? []) as PlaceResult[];
-}
-
-type SerpLocalResult = {
-  place_id?: string;
-  title?: string;
-  rating?: number;
-  reviews?: number;
-  address?: string;
-};
-
-function placeToSerpLocalResult(p: PlaceResult): SerpLocalResult {
-  return {
-    place_id: p.id,
-    title: p.displayName?.text,
-    rating: p.rating,
-    reviews: p.userRatingCount,
-    address: p.formattedAddress,
-  };
-}
-
-export default function HomeScreen() {
-  const user = auth.currentUser;
-
-  const [results, setResults] = useState<SerpLocalResult[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | undefined>(undefined);
-
-  async function runSearch() {
+  async function doSearch() {
+    setBusy(true);
+    setSelected(null);
+    setSummary(null);
     try {
-      setLoading(true);
-      setError(undefined);
-
-      const query = "Things to do in New York City, NYC";
-      const places = await textSearchNYC(query);
-
-      setResults(places.map(placeToSerpLocalResult));
+      const places = await placesTextSearch(query);
+      const mapped: PlaceRow[] = places.map((p) => ({
+        id: p.id,
+        name: p.displayName?.text || "(no name)",
+        address: p.formattedAddress,
+        lat: p.location?.latitude,
+        lng: p.location?.longitude,
+        rating: p.rating,
+        userRatingCount: p.userRatingCount,
+      }));
+      setResults(mapped);
     } catch (e: any) {
-      setError(e?.message ?? "Unknown error");
       setResults([]);
+      setSelected({ error: e?.message || String(e) });
     } finally {
-      setLoading(false);
+      setBusy(false);
+    }
+  }
+
+  async function openPlace(placeId: string) {
+    setBusy(true);
+    setSelected(null);
+    setSummary(null);
+    try {
+      const d = await placeDetails(placeId);
+      setSelected(d);
+
+      const reviews =
+        (d.reviews || [])
+          .slice(0, 8)
+          .map((r) => ({
+            author: r.authorAttribution?.displayName,
+            rating: r.rating,
+            text: r.text?.text || "",
+          }))
+          .filter((r) => r.text.trim().length > 0) || [];
+
+      if (reviews.length > 0) {
+        const s = await summarizeReviews(d.displayName?.text || "Place", reviews);
+        setSummary(s);
+      } else {
+        setSummary({ what_people_say: ["No reviews returned by API for this place."] });
+      }
+    } catch (e: any) {
+      setSelected({ error: e?.message || String(e) });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function optimizeTop5Route() {
+    // crude: use first 5 results with lat/lng; start at first
+    const candidates = results.filter(r => typeof r.lat === "number" && typeof r.lng === "number").slice(0, 5);
+    if (candidates.length < 2) return;
+
+    setBusy(true);
+    try {
+      const start = candidates[0];
+      const res = await buildItinerary({
+        start_lat: start.lat!,
+        start_lng: start.lng!,
+        candidates: candidates.map(c => ({
+          id: c.id,
+          name: c.name,
+          lat: c.lat!,
+          lng: c.lng!,
+          rating: c.rating,
+          userRatingCount: c.userRatingCount,
+        })),
+        max_stops: candidates.length,
+        dwell_minutes: 60,
+        start_time: "09:00",
+      });
+
+      // Open in Apple Maps using a simple "dirflg" link with waypoints
+      // Apple Maps supports a destination; for multiple waypoints, simplest is Google Maps URL
+      const waypoints = res.ordered.map(s => `${s.lat},${s.lng}`).join("|");
+      const url = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(
+        `${res.ordered[res.ordered.length - 1].lat},${res.ordered[res.ordered.length - 1].lng}`
+      )}&waypoints=${encodeURIComponent(waypoints)}`;
+
+      await Linking.openURL(url);
+    } finally {
+      setBusy(false);
     }
   }
 
   return (
-    <View className="flex-1 bg-white px-5 pt-10">
-      <Text className="text-2xl font-bold">Welcome Home</Text>
-      <Text className="mt-1 text-sm text-neutral-600">
-        Logged in as: {user?.email ?? "Unknown"}
-      </Text>
+    <View style={{ flex: 1, padding: 16 }}>
+      <Text style={{ fontSize: 22, fontWeight: "700", marginBottom: 12 }}>Places + Reviews + AI Summary</Text>
+
+      <View style={{ flexDirection: "row", gap: 10, alignItems: "center", marginBottom: 12 }}>
+        <TextInput
+          value={query}
+          onChangeText={setQuery}
+          style={{
+            flex: 1,
+            borderWidth: 1,
+            borderColor: "#D1D5DB",
+            borderRadius: 10,
+            paddingHorizontal: 12,
+            paddingVertical: 10,
+          }}
+        />
+        <Pressable
+          onPress={doSearch}
+          style={{
+            paddingVertical: 10,
+            paddingHorizontal: 14,
+            borderRadius: 10,
+            backgroundColor: busy ? "#9CA3AF" : "#111827",
+          }}
+        >
+          <Text style={{ color: "white", fontWeight: "700" }}>{busy ? "..." : "Search"}</Text>
+        </Pressable>
+      </View>
 
       <Pressable
-        onPress={runSearch}
-        disabled={loading}
-        className={`mt-6 rounded-2xl px-4 py-3 ${
-          loading ? "bg-neutral-400" : "bg-black"
-        }`}
+        onPress={optimizeTop5Route}
+        style={{
+          paddingVertical: 10,
+          paddingHorizontal: 14,
+          borderRadius: 10,
+          backgroundColor: results.length >= 2 ? "#2563EB" : "#9CA3AF",
+          marginBottom: 10,
+          alignSelf: "flex-start",
+        }}
+        disabled={results.length < 2 || busy}
       >
-        <Text className="text-center text-base font-semibold text-white">
-          {loading ? "Searching..." : "Search NYC Things To Do"}
-        </Text>
+        <Text style={{ color: "white", fontWeight: "700" }}>Optimize Top-5 Route (Heuristic)</Text>
       </Pressable>
 
-      {error ? (
-        <Text className="mt-3 text-sm text-red-600">Error: {error}</Text>
-      ) : null}
+      <View style={{ flex: 1, flexDirection: "row", gap: 12 }}>
+        <View style={{ flex: 1 }}>
+          <Text style={{ fontWeight: "700", marginBottom: 6 }}>Results</Text>
+          <FlatList
+            data={results}
+            keyExtractor={(item) => item.id}
+            renderItem={({ item }) => (
+              <Pressable
+                onPress={() => openPlace(item.id)}
+                style={{
+                  borderWidth: 1,
+                  borderColor: "#E5E7EB",
+                  borderRadius: 12,
+                  padding: 12,
+                  marginBottom: 10,
+                }}
+              >
+                <Text style={{ fontWeight: "700" }}>{item.name}</Text>
+                {item.address ? <Text style={{ color: "#6B7280" }}>{item.address}</Text> : null}
+                <Text style={{ marginTop: 4, color: "#374151" }}>
+                  Rating: {item.rating ?? "—"} ({item.userRatingCount ?? 0})
+                </Text>
+              </Pressable>
+            )}
+          />
+        </View>
 
-      <FlatList
-        className="mt-5"
-        data={results}
-        keyExtractor={(item, idx) => item.place_id ?? String(idx)}
-        ListEmptyComponent={
-          !loading ? (
-            <Text className="text-sm text-neutral-600">
-              No results yet. Tap the button above.
-            </Text>
-          ) : null
-        }
-        renderItem={({ item }) => <SerpApiCard item={item} />}
-      />
+        <View style={{ flex: 1 }}>
+          <Text style={{ fontWeight: "700", marginBottom: 6 }}>Details</Text>
+          <ScrollView
+            style={{
+              borderWidth: 1,
+              borderColor: "#E5E7EB",
+              borderRadius: 12,
+              padding: 12,
+              flex: 1,
+            }}
+          >
+            {!selected ? (
+              <Text style={{ color: "#6B7280" }}>Tap a place to fetch reviews + AI summary.</Text>
+            ) : selected.error ? (
+              <Text style={{ color: "#B91C1C" }}>{selected.error}</Text>
+            ) : (
+              <>
+                <Text style={{ fontSize: 18, fontWeight: "800" }}>{selected.displayName?.text}</Text>
+                <Text style={{ color: "#6B7280", marginBottom: 8 }}>{selected.formattedAddress}</Text>
+
+                <Text style={{ fontWeight: "700", marginTop: 10 }}>What people say</Text>
+                {summary?.what_people_say?.map((b: string, i: number) => (
+                  <Text key={`wps-${i}`}>• {b}</Text>
+                ))}
+
+                {summary?.pros?.length ? (
+                  <>
+                    <Text style={{ fontWeight: "700", marginTop: 10 }}>Pros</Text>
+                    {summary.pros.map((b: string, i: number) => (
+                      <Text key={`pro-${i}`}>• {b}</Text>
+                    ))}
+                  </>
+                ) : null}
+
+                {summary?.cons?.length ? (
+                  <>
+                    <Text style={{ fontWeight: "700", marginTop: 10 }}>Cons</Text>
+                    {summary.cons.map((b: string, i: number) => (
+                      <Text key={`con-${i}`}>• {b}</Text>
+                    ))}
+                  </>
+                ) : null}
+
+                {summary?.best_for?.length ? (
+                  <>
+                    <Text style={{ fontWeight: "700", marginTop: 10 }}>Best for</Text>
+                    {summary.best_for.map((b: string, i: number) => (
+                      <Text key={`bf-${i}`}>• {b}</Text>
+                    ))}
+                  </>
+                ) : null}
+              </>
+            )}
+          </ScrollView>
+        </View>
+      </View>
     </View>
   );
 }

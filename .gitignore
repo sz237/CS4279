@@ -42,4 +42,16 @@ app-example
 /ios
 /android
 
+# Python virtual environments
+.venv/
+venv/
 .env
+.env.example
+env/
+backend/.venv/
+backend/venv/
+backend/env/
+
+# Python cache
+__pycache__/
+*.pyc
