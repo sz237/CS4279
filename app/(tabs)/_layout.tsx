@@ -32,6 +32,17 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="itinerary"
+        options={{
+          title: "Itinerary",
+          headerShown: false,
+          href: "/(tabs)/itinerary/overview" as any,
+          tabBarIcon: ({ color }) => (
+            <Ionicons name="map-outline" size={24} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="serpapi"
         options={{
           title: "SerpAPI",
@@ -46,18 +57,6 @@ export default function TabLayout() {
           title: "Settings",
           tabBarIcon: ({ color }) => (
             <Ionicons name="settings" size={28} color={color} />
-          ),
-        }}
-        /> 
-
-        <Tabs.Screen
-        name="itinerary"
-        options={{
-          title: "Itinerary",
-          headerShown: false,
-          href: "/(tabs)/itinerary/overview" as any,
-          tabBarIcon: ({ color }) => (
-            <Ionicons name="map-outline" size={24} color={color} />
           ),
         }}
       />
