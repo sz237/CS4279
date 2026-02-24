@@ -14,6 +14,11 @@ type PlaceTextSearchResult = {
 };
 
 export async function placesTextSearch(query: string): Promise<PlaceTextSearchResult[]> {
+  const normalizedQuery = query.trim().toLowerCase();
+  if (!normalizedQuery) {
+    return [];
+  }
+
   const res = await fetch("https://places.googleapis.com/v1/places:searchText", {
     method: "POST",
     headers: {
@@ -22,7 +27,7 @@ export async function placesTextSearch(query: string): Promise<PlaceTextSearchRe
       "X-Goog-FieldMask":
         "places.id,places.displayName,places.formattedAddress,places.location,places.rating,places.userRatingCount",
     },
-    body: JSON.stringify({ textQuery: query }),
+    body: JSON.stringify({ textQuery: normalizedQuery }),
   });
 
   if (!res.ok) {
