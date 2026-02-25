@@ -1,33 +1,27 @@
-import * as Linking from "expo-linking";
-import { useMemo, useState } from "react";
-import { Alert, Pressable, ScrollView, Text, TextInput, View } from "react-native";
-import { saveTrip, TripStop } from "../../lib/trips";
+import { Ionicons } from "@expo/vector-icons";
+import { useCallback, useMemo, useState } from "react";
+import {
+    Alert,
+    Pressable,
+    ScrollView,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
+} from "react-native";
 
-// Uses Places API (New) text search (you already have Places usage in the repo per the doc)
-async function placesTextSearch(query: string) {
-  const key = process.env.EXPO_PUBLIC_googlePlacesApiKey;
-  if (!key) throw new Error("Missing EXPO_PUBLIC_googlePlacesApiKey in .env");
+import ActivityCard, { Activity } from "@/components/itinerary/ActivityCard";
+import {
+    getBestAddress,
+    getBestName,
+    getBestPhotoUrl,
+    searchText,
+    type PlaceV1,
+} from "@/src/googlePlaces";
 
-  const res = await fetch("https://places.googleapis.com/v1/places:searchText", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Goog-Api-Key": key,
-      "X-Goog-FieldMask":
-        "places.id,places.displayName,places.formattedAddress,places.location,places.types,places.rating,places.userRatingCount",
-    },
-    body: JSON.stringify({ textQuery: query }),
-  });
+import { openStopInGoogleMaps, saveTrip, TripStop } from "@/lib/trips";
 
-  if (!res.ok) {
-    const t = await res.text();
-    throw new Error(`Places search failed: ${res.status} ${t}`);
-  }
-  const data = await res.json();
-  return (data.places || []) as any[];
-}
-
-// Simple Haversine distance (free, no routing API needed)
+// ---------- Routing helpers (free) ----------
 function haversineKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }) {
   const R = 6371;
   const dLat = ((b.lat - a.lat) * Math.PI) / 180;
@@ -35,12 +29,14 @@ function haversineKm(a: { lat: number; lng: number }, b: { lat: number; lng: num
   const lat1 = (a.lat * Math.PI) / 180;
   const lat2 = (b.lat * Math.PI) / 180;
   const x =
-    Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
   return 2 * R * Math.asin(Math.sqrt(x));
 }
 
 function nearestNeighborRoute(stops: TripStop[]) {
   if (stops.length <= 2) return stops;
+
   const remaining = stops.slice(1);
   const route: TripStop[] = [stops[0]];
   let curr = stops[0];
@@ -49,7 +45,10 @@ function nearestNeighborRoute(stops: TripStop[]) {
     let bestIdx = 0;
     let bestD = Infinity;
     for (let i = 0; i < remaining.length; i++) {
-      const d = haversineKm({ lat: curr.lat, lng: curr.lng }, { lat: remaining[i].lat, lng: remaining[i].lng });
+      const d = haversineKm(
+        { lat: curr.lat, lng: curr.lng },
+        { lat: remaining[i].lat, lng: remaining[i].lng }
+      );
       if (d < bestD) {
         bestD = d;
         bestIdx = i;
@@ -69,103 +68,218 @@ function parseInterests(raw: string) {
     .filter(Boolean);
 }
 
+function toMeters(milesStr: string) {
+  const miles = Number(milesStr);
+  if (!Number.isFinite(miles) || miles <= 0) return undefined;
+  return Math.round(miles * 1609.34);
+}
+
+// Converts a PlaceV1 into a TripStop for saving / routing
+function placeToStop(apiKey: string, p: PlaceV1): TripStop {
+  const lat = p.location?.latitude;
+  const lng = p.location?.longitude;
+  if (typeof lat !== "number" || typeof lng !== "number") {
+    throw new Error("Place missing coordinates");
+  }
+
+  return {
+    id: p.id,
+    name: getBestName(p),
+    address: getBestAddress(p),
+    lat,
+    lng,
+    imageUrl: getBestPhotoUrl({ apiKey, place: p, maxWidthPx: 1200 }),
+    rating: p.rating,
+    userRatingCount: p.userRatingCount,
+    types: p.types,
+  };
+}
+
+// Convert TripStop to ActivityCard-compatible data
+function stopToActivity(stop: TripStop, opts: { labelRight?: string }): Activity {
+  const ratingStr =
+    stop.rating != null ? `${stop.rating.toFixed(1)}★ (${stop.userRatingCount ?? 0})` : "";
+
+  return {
+    id: stop.id,
+    title: stop.name,
+    description: stop.address ?? "",
+    time: opts.labelRight ?? ratingStr,
+    duration: (stop.types?.[0] ?? "").replaceAll("_", " "),
+    imageUrl: stop.imageUrl,
+  };
+}
+
+/**
+ * Renders an ActivityCard but makes the existing address text itself clickable
+ * (no restating / duplicating the address).
+ */
+function ActivityCardWithLinkedAddress(props: {
+  activity: Activity;
+  onPressCard?: () => void;
+  onPressAddress?: () => void;
+  selected?: boolean;
+  onToggleSelected?: () => void;
+}) {
+  const { activity, onPressCard, onPressAddress, selected, onToggleSelected } = props;
+
+  return (
+    <View style={{ position: "relative" }}>
+      {/* Optional selection badge (for place boxes) */}
+      {typeof selected === "boolean" && onToggleSelected ? (
+        <View
+          style={{
+            position: "absolute",
+            left: 14,
+            top: 10,
+            zIndex: 20,
+            width: 22,
+            height: 22,
+            borderRadius: 11,
+            alignItems: "center",
+            justifyContent: "center",
+            backgroundColor: selected ? "#16A34A" : "rgba(0,0,0,0.08)",
+          }}
+        >
+          <Ionicons
+            name={selected ? "checkmark" : "ellipse-outline"}
+            size={14}
+            color={selected ? "white" : "#6B7280"}
+          />
+        </View>
+      ) : null}
+
+      {/* Entire card press (toggle selection or open maps, depending on usage) */}
+      <Pressable onPress={onPressCard}>
+        <ActivityCard activity={activity} />
+
+        {/* Make the EXISTING address text clickable by overlaying a transparent hit area,
+            then re-rendering the exact same address string in link style at the same position.
+            This avoids "restating" it elsewhere; it's the same line, now tappable. */}
+        {activity.description ? (
+          <View style={{ position: "absolute", left: 52, right: 90, top: 44, zIndex: 30 }}>
+            <TouchableOpacity
+              onPress={(e) => {
+                e.stopPropagation?.();
+                onPressAddress?.();
+              }}
+              activeOpacity={0.7}
+            >
+              <Text
+                style={{
+                  color: "#2563EB",
+                  textDecorationLine: "underline",
+                  fontSize: 14,
+                }}
+                numberOfLines={1}
+              >
+                {activity.description}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
+      </Pressable>
+    </View>
+  );
+}
+
 export default function AddTripScreen() {
-  // Inputs required by spec
+  // Inputs
   const [cityOrArea, setCityOrArea] = useState("");
   const [radiusMiles, setRadiusMiles] = useState("5");
-  const [startDate, setStartDate] = useState(""); // keep as YYYY-MM-DD for MVP
+  const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [interestsRaw, setInterestsRaw] = useState("");
   const [mode, setMode] = useState<"list" | "itineraries">("list");
 
   // Data state
   const [busy, setBusy] = useState(false);
-  const [places, setPlaces] = useState<any[]>([]);
+  const [places, setPlaces] = useState<PlaceV1[]>([]);
   const [selectedIds, setSelectedIds] = useState<Record<string, boolean>>({});
   const [finalStops, setFinalStops] = useState<TripStop[] | null>(null);
 
   const interests = useMemo(() => parseInterests(interestsRaw), [interestsRaw]);
 
-  async function generate() {
+  // Matches your itinerary file pattern
+  const GOOGLE_PLACES_API_KEY = process.env.EXPO_PUBLIC_googlePlacesApiKey as string | undefined;
+
+  const toggle = useCallback((id: string) => {
+    setSelectedIds((prev) => ({ ...prev, [id]: !prev[id] }));
+  }, []);
+
+  const generate = useCallback(async () => {
+    if (!GOOGLE_PLACES_API_KEY) {
+      Alert.alert(
+        "Missing API Key",
+        "Set EXPO_PUBLIC_googlePlacesApiKey in your .env then restart Expo."
+      );
+      return;
+    }
     if (!cityOrArea.trim()) return Alert.alert("Missing city/area", "Enter a city or area.");
-    if (!startDate.trim() || !endDate.trim())
+    if (!startDate.trim() || !endDate.trim()) {
       return Alert.alert("Missing dates", "Enter start and end dates (YYYY-MM-DD).");
-    if (!interests.length)
+    }
+    if (!interests.length) {
       return Alert.alert("Missing interests", "Enter interests separated by commas.");
+    }
 
     setBusy(true);
     setFinalStops(null);
+
     try {
-      // Query strategy: combine city + interests for Places Text Search
       const q = `${interests.join(", ")} in ${cityOrArea}`;
-      const results = await placesTextSearch(q);
+      const radiusMeters = toMeters(radiusMiles);
+      void radiusMeters; // kept for future upgrade (geocode + locationBias)
 
-      // Convert to “place boxes” (name, address, short description -> MVP uses types/rating)
-      const mapped = results
-        .map((p) => ({
-          id: p.id,
-          name: p.displayName?.text || "(no name)",
-          address: p.formattedAddress || "",
-          lat: p.location?.latitude,
-          lng: p.location?.longitude,
-          rating: p.rating,
-          userRatingCount: p.userRatingCount,
-          types: (p.types || []).slice(0, 3).join(", "),
-        }))
-        .filter((p) => typeof p.lat === "number" && typeof p.lng === "number")
-        .slice(0, 15);
+      const resp = await searchText({
+        apiKey: GOOGLE_PLACES_API_KEY,
+        textQuery: q,
+        maxResultCount: 20,
+      });
 
-      setPlaces(mapped);
+      const results = (resp.places ?? []).filter(
+        (p) => typeof p.location?.latitude === "number" && typeof p.location?.longitude === "number"
+      );
+
+      setPlaces(results.slice(0, 15));
 
       // Default-select top 6
       const defaults: Record<string, boolean> = {};
-      mapped.slice(0, 6).forEach((p) => (defaults[p.id] = true));
+      results.slice(0, 6).forEach((p) => (defaults[p.id] = true));
       setSelectedIds(defaults);
 
       if (mode === "itineraries") {
-        // MVP: auto-build an itinerary immediately from top selections
-        const stops = mapped.slice(0, 6).map((p) => ({
-          id: p.id,
-          name: p.name,
-          address: p.address,
-          lat: p.lat,
-          lng: p.lng,
-        }));
+        const stops = results.slice(0, 6).map((p) => placeToStop(GOOGLE_PLACES_API_KEY, p));
         const ordered = nearestNeighborRoute(stops);
         setFinalStops(ordered);
       }
     } catch (e: any) {
-      Alert.alert("Generate failed", e?.message || String(e));
+      Alert.alert("Generate failed", e?.message ?? "Unknown error");
     } finally {
       setBusy(false);
     }
-  }
+  }, [GOOGLE_PLACES_API_KEY, cityOrArea, startDate, endDate, interests, radiusMiles, mode]);
 
-  function toggle(id: string) {
-    setSelectedIds((prev) => ({ ...prev, [id]: !prev[id] }));
-  }
+  const buildFromSelected = useCallback(async () => {
+    if (!GOOGLE_PLACES_API_KEY) {
+      Alert.alert(
+        "Missing API Key",
+        "Set EXPO_PUBLIC_googlePlacesApiKey in your .env then restart Expo."
+      );
+      return;
+    }
 
-  async function buildFromSelected() {
-    const selected = places
-      .filter((p) => selectedIds[p.id])
-      .map((p) => ({
-        id: p.id,
-        name: p.name,
-        address: p.address,
-        lat: p.lat,
-        lng: p.lng,
-      })) as TripStop[];
-
-    if (selected.length < 2) {
+    const selectedPlaces = places.filter((p) => selectedIds[p.id]);
+    if (selectedPlaces.length < 2) {
       return Alert.alert("Select at least 2 places", "Pick a few places to build your itinerary.");
     }
 
-    // Route optimization (free heuristic)
-    const ordered = nearestNeighborRoute(selected);
+    const stops = selectedPlaces.map((p) => placeToStop(GOOGLE_PLACES_API_KEY, p));
+    const ordered = nearestNeighborRoute(stops);
     setFinalStops(ordered);
-  }
+  }, [GOOGLE_PLACES_API_KEY, places, selectedIds]);
 
-  async function saveFinalTrip() {
+  const saveFinalTrip = useCallback(async () => {
     if (!finalStops || finalStops.length === 0) return;
 
     const tripId = `trip_${Date.now()}`;
@@ -180,229 +294,241 @@ export default function AddTripScreen() {
       stops: finalStops,
     });
 
-    Alert.alert("Saved!", "Trip saved locally. (Existing Trip tab can read from storage next.)");
-  }
-
-  async function openInMaps() {
-    if (!finalStops || finalStops.length < 2) return;
-
-    // Google Maps multi-stop directions URL
-    const waypoints = finalStops.slice(0, -1).map((s) => `${s.lat},${s.lng}`).join("|");
-    const destination = finalStops[finalStops.length - 1];
-    const url = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(
-      `${destination.lat},${destination.lng}`
-    )}&waypoints=${encodeURIComponent(waypoints)}`;
-
-    await Linking.openURL(url);
-  }
+    Alert.alert("Saved!", "Trip saved locally.");
+  }, [finalStops, cityOrArea, radiusMiles, startDate, endDate, interests]);
 
   return (
-    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, gap: 12 }}>
-      <Text style={{ fontSize: 24, fontWeight: "800" }}>Add Trip</Text>
-
-      <Text style={{ fontWeight: "700" }}>City or area</Text>
-      <TextInput
-        value={cityOrArea}
-        onChangeText={setCityOrArea}
-        placeholder="e.g., Austin, TX"
-        style={{ borderWidth: 1, borderColor: "#D1D5DB", borderRadius: 10, padding: 10 }}
-      />
-
-      <Text style={{ fontWeight: "700" }}>Radius (miles)</Text>
-      <TextInput
-        value={radiusMiles}
-        onChangeText={setRadiusMiles}
-        keyboardType="numeric"
-        placeholder="e.g., 5"
-        style={{ borderWidth: 1, borderColor: "#D1D5DB", borderRadius: 10, padding: 10 }}
-      />
-
-      <Text style={{ fontWeight: "700" }}>Dates (YYYY-MM-DD)</Text>
-      <View style={{ flexDirection: "row", gap: 10 }}>
-        <TextInput
-          value={startDate}
-          onChangeText={setStartDate}
-          placeholder="Start date"
-          style={{ flex: 1, borderWidth: 1, borderColor: "#D1D5DB", borderRadius: 10, padding: 10 }}
-        />
-        <TextInput
-          value={endDate}
-          onChangeText={setEndDate}
-          placeholder="End date"
-          style={{ flex: 1, borderWidth: 1, borderColor: "#D1D5DB", borderRadius: 10, padding: 10 }}
-        />
+    <ScrollView style={{ flex: 1, backgroundColor: "#F9FAFB" }} contentContainerStyle={{ paddingBottom: 24 }}>
+      {/* Header */}
+      <View style={{ paddingHorizontal: 16, paddingTop: 18, paddingBottom: 10 }}>
+        <Text style={{ fontSize: 24, fontWeight: "800" }}>Add Trip</Text>
+        <Text style={{ color: "#6B7280", marginTop: 4 }}>
+          Generate places, select your favorites, then build a route.
+        </Text>
       </View>
 
-      <Text style={{ fontWeight: "700" }}>Interests (comma-separated)</Text>
-      <TextInput
-        value={interestsRaw}
-        onChangeText={setInterestsRaw}
-        placeholder="museums, coffee, nature, nightlife"
-        style={{ borderWidth: 1, borderColor: "#D1D5DB", borderRadius: 10, padding: 10 }}
-      />
-
-      <Text style={{ fontWeight: "700" }}>Recommendation mode</Text>
-      <View style={{ flexDirection: "row", gap: 10 }}>
-        <Pressable
-          onPress={() => setMode("list")}
+      {/* Inputs */}
+      <View style={{ paddingHorizontal: 16, gap: 10 }}>
+        <Text style={{ fontWeight: "700" }}>City or area</Text>
+        <TextInput
+          value={cityOrArea}
+          onChangeText={setCityOrArea}
+          placeholder="e.g., Austin, TX"
           style={{
-            paddingVertical: 10,
-            paddingHorizontal: 12,
-            borderRadius: 10,
-            backgroundColor: mode === "list" ? "#111827" : "#E5E7EB",
+            borderWidth: 1,
+            borderColor: "#E5E7EB",
+            borderRadius: 16,
+            padding: 12,
+            backgroundColor: "white",
           }}
-        >
-          <Text style={{ color: mode === "list" ? "white" : "black", fontWeight: "700" }}>
-            List of places
-          </Text>
-        </Pressable>
-        <Pressable
-          onPress={() => setMode("itineraries")}
+        />
+
+        <Text style={{ fontWeight: "700" }}>Radius (miles)</Text>
+        <TextInput
+          value={radiusMiles}
+          onChangeText={setRadiusMiles}
+          keyboardType="numeric"
+          placeholder="e.g., 5"
           style={{
-            paddingVertical: 10,
-            paddingHorizontal: 12,
-            borderRadius: 10,
-            backgroundColor: mode === "itineraries" ? "#111827" : "#E5E7EB",
+            borderWidth: 1,
+            borderColor: "#E5E7EB",
+            borderRadius: 16,
+            padding: 12,
+            backgroundColor: "white",
           }}
-        >
-          <Text style={{ color: mode === "itineraries" ? "white" : "black", fontWeight: "700" }}>
-            Itinerary options
-          </Text>
-        </Pressable>
-      </View>
+        />
 
-      <Pressable
-        onPress={generate}
-        disabled={busy}
-        style={{
-          paddingVertical: 12,
-          borderRadius: 12,
-          backgroundColor: busy ? "#9CA3AF" : "#2563EB",
-          alignItems: "center",
-        }}
-      >
-        <Text style={{ color: "white", fontWeight: "800" }}>{busy ? "Generating..." : "Generate"}</Text>
-      </Pressable>
+        <Text style={{ fontWeight: "700" }}>Dates (YYYY-MM-DD)</Text>
+        <View style={{ flexDirection: "row", gap: 10 }}>
+          <TextInput
+            value={startDate}
+            onChangeText={setStartDate}
+            placeholder="Start date"
+            style={{
+              flex: 1,
+              borderWidth: 1,
+              borderColor: "#E5E7EB",
+              borderRadius: 16,
+              padding: 12,
+              backgroundColor: "white",
+            }}
+          />
+          <TextInput
+            value={endDate}
+            onChangeText={setEndDate}
+            placeholder="End date"
+            style={{
+              flex: 1,
+              borderWidth: 1,
+              borderColor: "#E5E7EB",
+              borderRadius: 16,
+              padding: 12,
+              backgroundColor: "white",
+            }}
+          />
+        </View>
 
-      {/* Place boxes list */}
-      {places.length > 0 && (
-        <View style={{ gap: 10 }}>
-          <Text style={{ fontSize: 18, fontWeight: "800" }}>
-            Places (tap to select)
-          </Text>
+        <Text style={{ fontWeight: "700" }}>Interests (comma-separated)</Text>
+        <TextInput
+          value={interestsRaw}
+          onChangeText={setInterestsRaw}
+          placeholder="museums, coffee, nature, nightlife"
+          style={{
+            borderWidth: 1,
+            borderColor: "#E5E7EB",
+            borderRadius: 16,
+            padding: 12,
+            backgroundColor: "white",
+          }}
+        />
 
-          {places.map((p) => (
-            <Pressable
-              key={p.id}
-              onPress={() => toggle(p.id)}
-              style={{
-                borderWidth: 2,
-                borderColor: selectedIds[p.id] ? "#22C55E" : "#E5E7EB",
-                borderRadius: 14,
-                padding: 12,
-                backgroundColor: selectedIds[p.id] ? "#ECFDF5" : "white",
-              }}
+        <Text style={{ fontWeight: "700" }}>Recommendation mode</Text>
+        <View style={{ flexDirection: "row", gap: 10 }}>
+          <Pressable
+            onPress={() => setMode("list")}
+            style={{
+              paddingVertical: 10,
+              paddingHorizontal: 12,
+              borderRadius: 16,
+              backgroundColor: mode === "list" ? "#111827" : "#E5E7EB",
+            }}
+          >
+            <Text style={{ color: mode === "list" ? "white" : "#111827", fontWeight: "700" }}>
+              List of places
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={() => setMode("itineraries")}
+            style={{
+              paddingVertical: 10,
+              paddingHorizontal: 12,
+              borderRadius: 16,
+              backgroundColor: mode === "itineraries" ? "#111827" : "#E5E7EB",
+            }}
+          >
+            <Text
+              style={{ color: mode === "itineraries" ? "white" : "#111827", fontWeight: "700" }}
             >
-              <Text style={{ fontWeight: "800" }}>{p.name}</Text>
-              <Text style={{ color: "#6B7280" }}>{p.address}</Text>
-              <Text style={{ marginTop: 6 }}>
-                {p.types || "Place"} • Rating {p.rating ?? "—"} ({p.userRatingCount ?? 0})
-              </Text>
-            </Pressable>
-          ))}
+              Itinerary options
+            </Text>
+          </Pressable>
+        </View>
 
+        {/* Generate button */}
+        <TouchableOpacity
+          onPress={generate}
+          disabled={busy}
+          activeOpacity={0.85}
+          style={{
+            backgroundColor: busy ? "#9CA3AF" : "#111827",
+            borderRadius: 16,
+            paddingVertical: 14,
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "center",
+            marginTop: 6,
+          }}
+        >
+          <Ionicons name="sparkles-outline" size={18} color="#FFFFFF" />
+          <Text style={{ color: "#FFFFFF", fontWeight: "700", marginLeft: 8 }}>
+            {busy ? "Generating…" : "Generate places"}
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Places list using ActivityCard UI */}
+      {places.length > 0 && GOOGLE_PLACES_API_KEY && (
+        <View style={{ marginTop: 14 }}>
+          <View style={{ paddingHorizontal: 16, paddingBottom: 6 }}>
+            <Text style={{ fontSize: 18, fontWeight: "800" }}>Places (tap to select)</Text>
+          </View>
+
+          {places.map((p) => {
+            const stop = placeToStop(GOOGLE_PLACES_API_KEY, p);
+            const activity = stopToActivity(stop, {});
+
+            return (
+              <ActivityCardWithLinkedAddress
+                key={p.id}
+                activity={activity}
+                selected={!!selectedIds[p.id]}
+                onToggleSelected={() => toggle(p.id)}
+                onPressCard={() => toggle(p.id)}
+                onPressAddress={() => openStopInGoogleMaps(stop)}
+              />
+            );
+          })}
+
+          {/* Build itinerary button */}
           {mode === "list" && (
-            <Pressable
-              onPress={buildFromSelected}
-              style={{
-                paddingVertical: 12,
-                borderRadius: 12,
-                backgroundColor: "#111827",
-                alignItems: "center",
-              }}
-            >
-              <Text style={{ color: "white", fontWeight: "800" }}>Build itinerary from selected</Text>
-            </Pressable>
+            <View style={{ paddingHorizontal: 16, paddingTop: 8 }}>
+              <TouchableOpacity
+                onPress={buildFromSelected}
+                activeOpacity={0.85}
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  borderWidth: 2,
+                  borderStyle: "dashed",
+                  borderColor: "#D1D5DB",
+                  borderRadius: 16,
+                  paddingVertical: 16,
+                  backgroundColor: "white",
+                }}
+              >
+                <Ionicons name="shuffle" size={18} color="#6B7280" />
+                <Text style={{ color: "#6B7280", fontWeight: "700", marginLeft: 6 }}>
+                  Build itinerary from selected
+                </Text>
+              </TouchableOpacity>
+            </View>
           )}
         </View>
       )}
 
-      {/* Flow map */}
+      {/* Flow map using ActivityCard style (tap address or card to open maps) */}
       {finalStops && finalStops.length > 0 && (
-        <View style={{ gap: 10, marginTop: 10 }}>
-          <Text style={{ fontSize: 18, fontWeight: "800" }}>Flow Map</Text>
-          {finalStops.map((s, idx) => (
-            <View key={s.id} style={{ gap: 8 }}>
-              <View
-                style={{
-                  borderWidth: 1,
-                  borderColor: "#E5E7EB",
-                  borderRadius: 14,
-                  padding: 12,
-                  backgroundColor: "white",
-                }}
-              >
-                <Text style={{ fontWeight: "900" }}>
-                  Stop {idx + 1}: {s.name}
-                </Text>
-                {s.address ? <Text style={{ color: "#6B7280" }}>{s.address}</Text> : null}
+        <View style={{ marginTop: 16 }}>
+          <View style={{ paddingHorizontal: 16, paddingBottom: 6 }}>
+            <Text style={{ fontSize: 18, fontWeight: "800" }}>Flow Map</Text>
+          </View>
+
+          {finalStops.map((s, idx) => {
+            const activity = stopToActivity(s, { labelRight: `Stop ${idx + 1}` });
+
+            return (
+              <View key={`flow-${s.id}`}>
+                <ActivityCardWithLinkedAddress
+                  activity={activity}
+                  onPressCard={() => openStopInGoogleMaps(s)}
+                  onPressAddress={() => openStopInGoogleMaps(s)}
+                />
+
+                {idx < finalStops.length - 1 ? (
+                  <Text style={{ textAlign: "center", color: "#9CA3AF", marginBottom: 6 }}>↓</Text>
+                ) : null}
               </View>
+            );
+          })}
 
-              {idx < finalStops.length - 1 ? (
-                <Text style={{ textAlign: "center", color: "#6B7280" }}>↓</Text>
-              ) : null}
-            </View>
-          ))}
-        </View>
-      )}
-
-      {/* Treasure map */}
-      {finalStops && finalStops.length > 0 && (
-        <View style={{ gap: 10, marginTop: 10, marginBottom: 30 }}>
-          <Text style={{ fontSize: 18, fontWeight: "800" }}>Treasure Map</Text>
-
-          {finalStops.map((s, idx) => (
-            <View key={`t-${s.id}`} style={{ gap: 10 }}>
-              <View
-                style={{
-                  borderWidth: 2,
-                  borderStyle: "dashed",
-                  borderColor: "#D97706",
-                  borderRadius: 14,
-                  padding: 12,
-                  backgroundColor: "#FFFBEB",
-                }}
-              >
-                <Text style={{ fontWeight: "900" }}>
-                  {idx + 1}. {s.name}
-                </Text>
-                {s.address ? <Text style={{ color: "#92400E" }}>{s.address}</Text> : null}
-              </View>
-
-              {idx < finalStops.length - 1 ? (
-                <Text style={{ textAlign: "center", color: "#D97706" }}>················</Text>
-              ) : (
-                <Text style={{ textAlign: "center", fontSize: 22, fontWeight: "900", color: "#DC2626" }}>
-                  X
-                </Text>
-              )}
-            </View>
-          ))}
-
-          <View style={{ flexDirection: "row", gap: 10 }}>
-            <Pressable
+          <View style={{ paddingHorizontal: 16, paddingTop: 10, flexDirection: "row", gap: 10 }}>
+            <TouchableOpacity
               onPress={saveFinalTrip}
-              style={{ flex: 1, paddingVertical: 12, borderRadius: 12, backgroundColor: "#16A34A", alignItems: "center" }}
+              activeOpacity={0.85}
+              style={{
+                flex: 1,
+                backgroundColor: "#111827",
+                borderRadius: 16,
+                paddingVertical: 14,
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
             >
-              <Text style={{ color: "white", fontWeight: "800" }}>Save Trip</Text>
-            </Pressable>
-
-            <Pressable
-              onPress={openInMaps}
-              style={{ flex: 1, paddingVertical: 12, borderRadius: 12, backgroundColor: "#2563EB", alignItems: "center" }}
-            >
-              <Text style={{ color: "white", fontWeight: "800" }}>Open in Maps</Text>
-            </Pressable>
+              <Ionicons name="save-outline" size={18} color="#FFFFFF" />
+              <Text style={{ color: "white", fontWeight: "800", marginLeft: 6 }}>Save Trip</Text>
+            </TouchableOpacity>
           </View>
         </View>
       )}

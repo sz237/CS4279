@@ -1,6 +1,5 @@
-import React from "react";
-import { View, Text, Image, TouchableOpacity } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { Image, Text, TouchableOpacity, View } from "react-native";
 
 export interface Activity {
   id: string;
@@ -15,9 +14,15 @@ interface ActivityCardProps {
   activity: Activity;
   drag?: () => void;
   isActive?: boolean;
+  onRemove?: (id: string) => void;
 }
 
-export default function ActivityCard({ activity, drag, isActive }: ActivityCardProps) {
+export default function ActivityCard({
+  activity,
+  drag,
+  isActive,
+  onRemove, // ✅ important
+}: ActivityCardProps) {
   return (
     <View
       className={`flex-row items-center bg-white rounded-2xl mx-4 mb-3 overflow-hidden ${
@@ -31,6 +36,28 @@ export default function ActivityCard({ activity, drag, isActive }: ActivityCardP
         elevation: isActive ? 8 : 2,
       }}
     >
+      {/* ✅ Remove Button */}
+      {onRemove && (
+        <TouchableOpacity
+          onPress={() => onRemove(activity.id)}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          style={{
+            position: "absolute",
+            top: 8,
+            right: 8,
+            width: 26,
+            height: 26,
+            borderRadius: 13,
+            alignItems: "center",
+            justifyContent: "center",
+            backgroundColor: "rgba(0,0,0,0.05)",
+            zIndex: 10,
+          }}
+        >
+          <Ionicons name="close" size={16} color="#6B7280" />
+        </TouchableOpacity>
+      )}
+
       {/* Drag Handle */}
       <TouchableOpacity
         onLongPress={drag}
@@ -46,12 +73,20 @@ export default function ActivityCard({ activity, drag, isActive }: ActivityCardP
           <Text className="text-base font-semibold text-gray-900 flex-1 mr-2">
             {activity.title}
           </Text>
-          <Text className="text-xs text-gray-400 font-medium">{activity.time}</Text>
+          <Text className="text-xs text-gray-400 font-medium">
+            {activity.time}
+          </Text>
         </View>
-        <Text className="text-sm text-gray-500 mb-1">{activity.description}</Text>
+
+        <Text className="text-sm text-gray-500 mb-1">
+          {activity.description}
+        </Text>
+
         <View className="flex-row items-center">
           <Ionicons name="time-outline" size={12} color="#9CA3AF" />
-          <Text className="text-xs text-gray-400 ml-1">{activity.duration}</Text>
+          <Text className="text-xs text-gray-400 ml-1">
+            {activity.duration}
+          </Text>
         </View>
       </View>
 
