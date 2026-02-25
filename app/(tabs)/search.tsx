@@ -38,6 +38,7 @@ export default function SearchScreen() {
   const [detailError, setDetailError] = useState("");
   const [selectedPlace, setSelectedPlace] = useState<SearchResult | null>(null);
   const [reviewSnippets, setReviewSnippets] = useState<ReviewSnippet[]>([]);
+  const [itineraryIds, setItineraryIds] = useState<string[]>([]);
 
   const canSearch = useMemo(() => location.trim().length > 0 && !busy, [location, busy]);
 
@@ -110,6 +111,10 @@ export default function SearchScreen() {
     setDetailVisible(false);
   }, []);
 
+  const addToItinerary = useCallback((placeId: string) => {
+    setItineraryIds((prev) => (prev.includes(placeId) ? prev : [...prev, placeId]));
+  }, []);
+
   return (
     <View style={styles.screen}>
       <View style={styles.header}>
@@ -170,7 +175,7 @@ export default function SearchScreen() {
             ) : null
           }
           renderItem={({ item }) => (
-            <Pressable style={styles.resultCard} onPress={() => openResultDetails(item)}>
+            <View style={styles.resultCard}>
               <Text style={styles.resultName}>{item.name}</Text>
               {!!item.address && <Text style={styles.resultAddress}>{item.address}</Text>}
               <View style={styles.metaRow}>
@@ -179,7 +184,26 @@ export default function SearchScreen() {
                   {item.rating ?? "—"} ({item.reviewCount ?? 0})
                 </Text>
               </View>
-            </Pressable>
+              <View style={styles.resultActions}>
+                <Pressable
+                  style={styles.viewReviewsButton}
+                  onPress={() => openResultDetails(item)}
+                >
+                  <Text style={styles.viewReviewsButtonText}>View Reviews</Text>
+                </Pressable>
+                <Pressable
+                  style={[
+                    styles.addToItineraryButton,
+                    itineraryIds.includes(item.id) && styles.addToItineraryButtonAdded,
+                  ]}
+                  onPress={() => addToItinerary(item.id)}
+                >
+                  <Text style={styles.addToItineraryButtonText}>
+                    {itineraryIds.includes(item.id) ? "Added" : "Add to Itinerary"}
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
           )}
           ListEmptyComponent={
             <View style={styles.emptyState}>
@@ -357,6 +381,39 @@ const styles = StyleSheet.create({
     marginLeft: 4,
     color: "#4B5563",
     fontSize: 13,
+  },
+  resultActions: {
+    marginTop: 10,
+    flexDirection: "row",
+    gap: 8,
+  },
+  viewReviewsButton: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: "#111827",
+    borderRadius: 10,
+    paddingVertical: 9,
+    alignItems: "center",
+  },
+  viewReviewsButtonText: {
+    color: "#111827",
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  addToItineraryButton: {
+    flex: 1,
+    backgroundColor: "#111827",
+    borderRadius: 10,
+    paddingVertical: 9,
+    alignItems: "center",
+  },
+  addToItineraryButtonAdded: {
+    backgroundColor: "#374151",
+  },
+  addToItineraryButtonText: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontWeight: "700",
   },
   emptyState: {
     flex: 1,
