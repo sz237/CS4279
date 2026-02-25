@@ -15,10 +15,26 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { ItinerarySheetContext } from "@/lib/ItinerarySheetContext";
 
 const STOPS = [
-  { id: "bixby",    coordinate: { latitude: 36.3719, longitude: -121.9019 }, title: "Bixby Bridge" },
-  { id: "nepenthe", coordinate: { latitude: 36.2556, longitude: -121.7783 }, title: "Nepenthe" },
-  { id: "pfeiffer", coordinate: { latitude: 36.2394, longitude: -121.8169 }, title: "Pfeiffer Beach" },
-  { id: "mcway",    coordinate: { latitude: 36.1577, longitude: -121.6692 }, title: "McWay Falls" },
+  {
+    id: "times_square",
+    coordinate: { latitude: 40.7580, longitude: -73.9855 },
+    title: "Times Square",
+  },
+  {
+    id: "central_park",
+    coordinate: { latitude: 40.7829, longitude: -73.9654 },
+    title: "Central Park",
+  },
+  {
+    id: "statue_of_liberty",
+    coordinate: { latitude: 40.6892, longitude: -74.0445 },
+    title: "Statue of Liberty",
+  },
+  {
+    id: "brooklyn_bridge",
+    coordinate: { latitude: 40.7061, longitude: -73.9969 },
+    title: "Brooklyn Bridge",
+  },
 ];
 
 const ROUTE_COORDS = STOPS.map((s) => s.coordinate);
@@ -129,12 +145,14 @@ export default function ItineraryLayout() {
         <Animated.View style={{ height: mapHeightAnim, overflow: "hidden" }}>
           <MapView
             style={{ flex: 1 }}
+
             initialRegion={{
-              latitude: 36.27,
-              longitude: -121.77,
-              latitudeDelta: 0.55,
-              longitudeDelta: 0.55,
+              latitude: 40.7580,
+              longitude: -73.9855,
+              latitudeDelta: 0.12,
+              longitudeDelta: 0.12,
             }}
+
             mapType="standard"
             showsUserLocation={false}
             scrollEnabled={false}
