@@ -51,6 +51,18 @@ export default function TabLayout() {
           ),
         }}
       />
+      <Tabs.Screen
+        name="serpapi"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="googleplaces"
+        options={{
+          href: null,
+        }}
+      />
     </Tabs>
   );
 }
