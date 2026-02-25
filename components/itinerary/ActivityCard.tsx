@@ -99,7 +99,7 @@ export default function ActivityCard({
           </Text>
         </View>
 
-        {/* Address is now a hyperlink*/}
+        {/* Address Hyperlink */}
         {hasDescription ? (
           <TouchableOpacity activeOpacity={0.7} onPress={handleOpenAddress}>
             <Text

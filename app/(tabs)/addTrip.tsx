@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import * as Linking from "expo-linking";
 import { useCallback, useMemo, useState } from "react";
 import {
     Alert,
@@ -128,7 +129,9 @@ export default function AddTripScreen() {
   const interests = useMemo(() => parseInterests(interestsRaw), [interestsRaw]);
 
   // Matches your itinerary file pattern
-  const GOOGLE_PLACES_API_KEY = process.env.EXPO_PUBLIC_googlePlacesApiKey as string | undefined;
+  const GOOGLE_PLACES_API_KEY = process.env.EXPO_PUBLIC_googlePlacesApiKey as
+    | string
+    | undefined;
 
   const toggle = useCallback((id: string) => {
     setSelectedIds((prev) => ({ ...prev, [id]: !prev[id] }));
@@ -165,7 +168,9 @@ export default function AddTripScreen() {
       });
 
       const results = (resp.places ?? []).filter(
-        (p) => typeof p.location?.latitude === "number" && typeof p.location?.longitude === "number"
+        (p) =>
+          typeof p.location?.latitude === "number" &&
+          typeof p.location?.longitude === "number"
       );
 
       setPlaces(results.slice(0, 15));
@@ -176,7 +181,9 @@ export default function AddTripScreen() {
       setSelectedIds(defaults);
 
       if (mode === "itineraries") {
-        const stops = results.slice(0, 6).map((p) => placeToStop(GOOGLE_PLACES_API_KEY, p));
+        const stops = results.slice(0, 6).map((p) =>
+          placeToStop(GOOGLE_PLACES_API_KEY, p)
+        );
         const ordered = nearestNeighborRoute(stops);
         setFinalStops(ordered);
       }
@@ -224,8 +231,37 @@ export default function AddTripScreen() {
     Alert.alert("Saved!", "Trip saved locally.");
   }, [finalStops, cityOrArea, radiusMiles, startDate, endDate, interests]);
 
+  const exportItineraryToGoogleMaps = useCallback(async () => {
+    if (!finalStops || finalStops.length < 2) {
+      Alert.alert("Not enough stops", "Build an itinerary with at least 2 stops first.");
+      return;
+    }
+
+    // Google Maps multi-stop directions URL
+    const waypoints = finalStops
+      .slice(0, -1)
+      .map((s) => `${s.lat},${s.lng}`)
+      .join("|");
+    const destination = finalStops[finalStops.length - 1];
+
+    const url = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(
+      `${destination.lat},${destination.lng}`
+    )}&waypoints=${encodeURIComponent(waypoints)}`;
+
+    const can = await Linking.canOpenURL(url);
+    if (!can) {
+      Alert.alert("Can't open Google Maps", "Your device can't open the route URL.");
+      return;
+    }
+
+    await Linking.openURL(url);
+  }, [finalStops]);
+
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: "#F9FAFB" }} contentContainerStyle={{ paddingBottom: 24 }}>
+    <ScrollView
+      style={{ flex: 1, backgroundColor: "#F9FAFB" }}
+      contentContainerStyle={{ paddingBottom: 24 }}
+    >
       {/* Header */}
       <View style={{ paddingHorizontal: 16, paddingTop: 18, paddingBottom: 10 }}>
         <Text style={{ fontSize: 24, fontWeight: "800" }}>Add Trip</Text>
@@ -320,7 +356,12 @@ export default function AddTripScreen() {
               backgroundColor: mode === "list" ? "#111827" : "#E5E7EB",
             }}
           >
-            <Text style={{ color: mode === "list" ? "white" : "#111827", fontWeight: "700" }}>
+            <Text
+              style={{
+                color: mode === "list" ? "white" : "#111827",
+                fontWeight: "700",
+              }}
+            >
               List of places
             </Text>
           </Pressable>
@@ -334,7 +375,10 @@ export default function AddTripScreen() {
             }}
           >
             <Text
-              style={{ color: mode === "itineraries" ? "white" : "#111827", fontWeight: "700" }}
+              style={{
+                color: mode === "itineraries" ? "white" : "#111827",
+                fontWeight: "700",
+              }}
             >
               Itinerary options
             </Text>
@@ -399,7 +443,7 @@ export default function AddTripScreen() {
                 </View>
 
                 {/* Tap card to select/unselect.
-                    Tapping the address hyperlink inside ActivityCard will open Maps (now handled in ActivityCard.tsx) */}
+                    Address hyperlink inside ActivityCard opens Maps (handled in ActivityCard.tsx). */}
                 <Pressable onPress={() => toggle(p.id)}>
                   <ActivityCard activity={activity} />
                 </Pressable>
@@ -435,7 +479,7 @@ export default function AddTripScreen() {
         </View>
       )}
 
-      {/* Itinerary using ActivityCard style (tap address or card to open maps) */}
+      {/* Itinerary using ActivityCard style */}
       {finalStops && finalStops.length > 0 && (
         <View style={{ marginTop: 16 }}>
           <View style={{ paddingHorizontal: 16, paddingBottom: 6 }}>
@@ -448,7 +492,7 @@ export default function AddTripScreen() {
             return (
               <View key={`flow-${s.id}`}>
                 {/* Tap card to open stop in Maps.
-                    Address hyperlink still works independently inside ActivityCard.tsx. */}
+                    Address hyperlink inside ActivityCard also opens Maps. */}
                 <Pressable onPress={() => openStopInGoogleMaps(s)}>
                   <ActivityCard activity={activity} />
                 </Pressable>
@@ -476,6 +520,23 @@ export default function AddTripScreen() {
             >
               <Ionicons name="save-outline" size={18} color="#FFFFFF" />
               <Text style={{ color: "white", fontWeight: "800", marginLeft: 6 }}>Save Trip</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={exportItineraryToGoogleMaps}
+              activeOpacity={0.85}
+              style={{
+                flex: 1,
+                backgroundColor: "#2563EB",
+                borderRadius: 16,
+                paddingVertical: 14,
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <Ionicons name="navigate-outline" size={18} color="#FFFFFF" />
+              <Text style={{ color: "white", fontWeight: "800", marginLeft: 6 }}>Export Route</Text>
             </TouchableOpacity>
           </View>
         </View>
