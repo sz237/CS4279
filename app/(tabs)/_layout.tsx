@@ -25,10 +25,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="aichat"
         options={{
-          title: "Chat",
-          tabBarIcon: ({ color }) => (
-            <Ionicons name="chatbox-outline" size={28} color={color} />
-          ),
+          href: null,
         }}
       />
       <Tabs.Screen
