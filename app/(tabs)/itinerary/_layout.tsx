@@ -1,16 +1,16 @@
-import React, { useRef, useState, useEffect, useCallback } from "react";
+import { Slot, usePathname, useRouter } from "expo-router";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  View,
-  Text,
-  TouchableOpacity,
-  StatusBar,
   Animated,
   PanResponder,
+  StatusBar,
+  Text,
+  TouchableOpacity,
   useWindowDimensions,
+  View,
 } from "react-native";
-import { Slot, useRouter, usePathname } from "expo-router";
-import { SafeAreaView } from "react-native-safe-area-context";
 import MapView, { Marker, Polyline } from "react-native-maps";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 import { ItinerarySheetContext } from "@/lib/ItinerarySheetContext";
 
@@ -115,7 +115,7 @@ export default function ItineraryLayout() {
       {/* ── Trip header ─────────────────────────────────────────────── */}
       <View className="flex-row items-center justify-between px-5 pt-1 pb-2">
         <View>
-          <Text className="text-2xl font-bold text-gray-900">SoCal Road Trip 🌴</Text>
+          <Text className="text-2xl font-bold text-gray-900">Big Apple Vacay 🍎</Text>
           <Text className="text-sm text-gray-400 mt-0.5">March 21–25, 2025</Text>
         </View>
       </View>
