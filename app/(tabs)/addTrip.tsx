@@ -110,79 +110,6 @@ function stopToActivity(stop: TripStop, opts: { labelRight?: string }): Activity
   };
 }
 
-/**
- * Renders an ActivityCard but makes the existing address text itself clickable
- * (no restating / duplicating the address).
- */
-function ActivityCardWithLinkedAddress(props: {
-  activity: Activity;
-  onPressCard?: () => void;
-  onPressAddress?: () => void;
-  selected?: boolean;
-  onToggleSelected?: () => void;
-}) {
-  const { activity, onPressCard, onPressAddress, selected, onToggleSelected } = props;
-
-  return (
-    <View style={{ position: "relative" }}>
-      {/* Optional selection badge (for place boxes) */}
-      {typeof selected === "boolean" && onToggleSelected ? (
-        <View
-          style={{
-            position: "absolute",
-            left: 14,
-            top: 10,
-            zIndex: 20,
-            width: 22,
-            height: 22,
-            borderRadius: 11,
-            alignItems: "center",
-            justifyContent: "center",
-            backgroundColor: selected ? "#16A34A" : "rgba(0,0,0,0.08)",
-          }}
-        >
-          <Ionicons
-            name={selected ? "checkmark" : "ellipse-outline"}
-            size={14}
-            color={selected ? "white" : "#6B7280"}
-          />
-        </View>
-      ) : null}
-
-      {/* Entire card press (toggle selection or open maps, depending on usage) */}
-      <Pressable onPress={onPressCard}>
-        <ActivityCard activity={activity} />
-
-        {/* Make the EXISTING address text clickable by overlaying a transparent hit area,
-            then re-rendering the exact same address string in link style at the same position.
-            This avoids "restating" it elsewhere; it's the same line, now tappable. */}
-        {activity.description ? (
-          <View style={{ position: "absolute", left: 52, right: 90, top: 44, zIndex: 30 }}>
-            <TouchableOpacity
-              onPress={(e) => {
-                e.stopPropagation?.();
-                onPressAddress?.();
-              }}
-              activeOpacity={0.7}
-            >
-              <Text
-                style={{
-                  color: "#2563EB",
-                  textDecorationLine: "underline",
-                  fontSize: 14,
-                }}
-                numberOfLines={1}
-              >
-                {activity.description}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        ) : null}
-      </Pressable>
-    </View>
-  );
-}
-
 export default function AddTripScreen() {
   // Inputs
   const [cityOrArea, setCityOrArea] = useState("");
@@ -448,14 +375,35 @@ export default function AddTripScreen() {
             const activity = stopToActivity(stop, {});
 
             return (
-              <ActivityCardWithLinkedAddress
-                key={p.id}
-                activity={activity}
-                selected={!!selectedIds[p.id]}
-                onToggleSelected={() => toggle(p.id)}
-                onPressCard={() => toggle(p.id)}
-                onPressAddress={() => openStopInGoogleMaps(stop)}
-              />
+              <View key={p.id} style={{ position: "relative" }}>
+                {/* Selection badge */}
+                <View
+                  style={{
+                    position: "absolute",
+                    left: 14,
+                    top: 10,
+                    zIndex: 20,
+                    width: 22,
+                    height: 22,
+                    borderRadius: 11,
+                    alignItems: "center",
+                    justifyContent: "center",
+                    backgroundColor: selectedIds[p.id] ? "#16A34A" : "rgba(0,0,0,0.08)",
+                  }}
+                >
+                  <Ionicons
+                    name={selectedIds[p.id] ? "checkmark" : "ellipse-outline"}
+                    size={14}
+                    color={selectedIds[p.id] ? "white" : "#6B7280"}
+                  />
+                </View>
+
+                {/* Tap card to select/unselect.
+                    Tapping the address hyperlink inside ActivityCard will open Maps (now handled in ActivityCard.tsx) */}
+                <Pressable onPress={() => toggle(p.id)}>
+                  <ActivityCard activity={activity} />
+                </Pressable>
+              </View>
             );
           })}
 
@@ -487,11 +435,11 @@ export default function AddTripScreen() {
         </View>
       )}
 
-      {/* Flow map using ActivityCard style (tap address or card to open maps) */}
+      {/* Itinerary using ActivityCard style (tap address or card to open maps) */}
       {finalStops && finalStops.length > 0 && (
         <View style={{ marginTop: 16 }}>
           <View style={{ paddingHorizontal: 16, paddingBottom: 6 }}>
-            <Text style={{ fontSize: 18, fontWeight: "800" }}>Flow Map</Text>
+            <Text style={{ fontSize: 18, fontWeight: "800" }}>Itinerary</Text>
           </View>
 
           {finalStops.map((s, idx) => {
@@ -499,11 +447,11 @@ export default function AddTripScreen() {
 
             return (
               <View key={`flow-${s.id}`}>
-                <ActivityCardWithLinkedAddress
-                  activity={activity}
-                  onPressCard={() => openStopInGoogleMaps(s)}
-                  onPressAddress={() => openStopInGoogleMaps(s)}
-                />
+                {/* Tap card to open stop in Maps.
+                    Address hyperlink still works independently inside ActivityCard.tsx. */}
+                <Pressable onPress={() => openStopInGoogleMaps(s)}>
+                  <ActivityCard activity={activity} />
+                </Pressable>
 
                 {idx < finalStops.length - 1 ? (
                   <Text style={{ textAlign: "center", color: "#9CA3AF", marginBottom: 6 }}>↓</Text>

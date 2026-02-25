@@ -1,10 +1,11 @@
 import { Ionicons } from "@expo/vector-icons";
+import * as Linking from "expo-linking";
 import { Image, Text, TouchableOpacity, View } from "react-native";
 
 export interface Activity {
   id: string;
   title: string;
-  description: string;
+  description: string; // address (now tappable)
   time: string;
   duration: string;
   imageUrl?: string;
@@ -17,12 +18,32 @@ interface ActivityCardProps {
   onRemove?: (id: string) => void;
 }
 
+function googleMapsSearchUrl(query: string) {
+  // Uses a plain search; works without lat/lng
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
+}
+
 export default function ActivityCard({
   activity,
   drag,
   isActive,
-  onRemove, // ✅ important
+  onRemove,
 }: ActivityCardProps) {
+  const hasDescription = !!activity.description?.trim();
+
+  const handleOpenAddress = async () => {
+    if (!hasDescription) return;
+
+    // Best-effort query: address + title improves accuracy
+    const q = `${activity.description} ${activity.title}`.trim();
+    const url = googleMapsSearchUrl(q);
+
+    const canOpen = await Linking.canOpenURL(url);
+    if (canOpen) {
+      await Linking.openURL(url);
+    }
+  };
+
   return (
     <View
       className={`flex-row items-center bg-white rounded-2xl mx-4 mb-3 overflow-hidden ${
@@ -78,9 +99,22 @@ export default function ActivityCard({
           </Text>
         </View>
 
-        <Text className="text-sm text-gray-500 mb-1">
-          {activity.description}
-        </Text>
+        {/* Address is now a hyperlink*/}
+        {hasDescription ? (
+          <TouchableOpacity activeOpacity={0.7} onPress={handleOpenAddress}>
+            <Text
+              className="text-sm mb-1"
+              style={{ color: "#2563EB", textDecorationLine: "underline" }}
+              numberOfLines={1}
+            >
+              {activity.description}
+            </Text>
+          </TouchableOpacity>
+        ) : (
+          <Text className="text-sm text-gray-500 mb-1" numberOfLines={1}>
+            {activity.description}
+          </Text>
+        )}
 
         <View className="flex-row items-center">
           <Ionicons name="time-outline" size={12} color="#9CA3AF" />
