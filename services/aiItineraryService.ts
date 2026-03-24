@@ -148,6 +148,8 @@ export async function generateAiItinerary(
             act.estimatedDurationMinutes ??
             act.estimatedActivityDurationMinutes ??
             60,
+          aiCommuteMinutes:
+            act.estimatedCommuteTransportToNextDurationMinutes ?? null,
           aiCategory: act.type,
           aiTravelMode: parseTravelMode(act.transportToNext),
         })),

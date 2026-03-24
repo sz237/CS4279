@@ -13,7 +13,7 @@ const MODE_CONFIG: Record<TravelMode, {
 };
 
 type Props = {
-  minutes: number;
+  minutes?: number | null;
   mode: TravelMode;
 };
 
@@ -30,7 +30,7 @@ export function CommuteConnector({ minutes, mode }: Props) {
       <View className="flex-row items-center gap-1.5 px-3 py-1.5 bg-slate-100/80 rounded-full border border-slate-200/50">
         <Ionicons name={icon} size={12} color="#6B7280" />
         <Text className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">
-          {minutes} min {label}
+          {minutes != null ? `${minutes} min ${label}` : `-- min ${label}`}
         </Text>
       </View>
       <VerticalLine />

@@ -42,12 +42,6 @@ function parseInterests(raw: string): string[] {
   return raw.split(",").map((s) => s.trim()).filter(Boolean);
 }
 
-function toMeters(milesStr: string): number | undefined {
-  const miles = Number(milesStr);
-  if (!Number.isFinite(miles) || miles <= 0) return undefined;
-  return Math.round(miles * 1609.34);
-}
-
 // ─── Hook ────────────────────────────────────────────────────────────────────
 
 export function useAddTrip() {
@@ -102,8 +96,9 @@ export function useAddTrip() {
     setFinalStops(null);
 
     try {
-      const q = `${interests.join(", ")} in ${cityOrArea}`;
-      void toMeters(radiusMiles); // kept for future geocode + locationBias upgrade
+      const q = interests.length > 0
+        ? `${interests.join(", ")} in ${cityOrArea}`
+        : cityOrArea;
 
       const results = await searchPlaces(GOOGLE_PLACES_API_KEY, q, 20);
       setPlaces(results.slice(0, 15));
@@ -239,6 +234,45 @@ export function useAddTrip() {
     setAiExtraStops((prev) => prev.filter((s) => s.id !== stop.id));
   }, []);
 
+  // ── Places-list direct export / save (no AI, no route-build step) ───────
+  const exportSelectedRoute = useCallback(async () => {
+    if (!GOOGLE_PLACES_API_KEY) return;
+    const selected = places.filter((p) => selectedIds[p.id]);
+    if (selected.length < 2) {
+      Alert.alert("Select at least 2 places", "Tap places to select them first.");
+      return;
+    }
+    const stops = nearestNeighborRoute(selected.map((p) => placeToStop(GOOGLE_PLACES_API_KEY, p)));
+    const waypoints = stops.slice(0, -1).map((s) => `${s.lat},${s.lng}`).join("|");
+    const dest = stops[stops.length - 1];
+    const url = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(
+      `${dest.lat},${dest.lng}`
+    )}&waypoints=${encodeURIComponent(waypoints)}`;
+    if (await Linking.canOpenURL(url)) await Linking.openURL(url);
+    else Alert.alert("Can't open Google Maps");
+  }, [GOOGLE_PLACES_API_KEY, places, selectedIds]);
+
+  const saveSelectedTrip = useCallback(async () => {
+    if (!GOOGLE_PLACES_API_KEY) return;
+    const selected = places.filter((p) => selectedIds[p.id]);
+    if (!selected.length) {
+      Alert.alert("No places selected", "Tap places to select them first.");
+      return;
+    }
+    const stops = selected.map((p) => placeToStop(GOOGLE_PLACES_API_KEY, p));
+    await saveTrip({
+      tripId: `trip_${Date.now()}`,
+      createdAt: new Date().toISOString(),
+      cityOrArea,
+      radiusMiles: Number(radiusMiles) || undefined,
+      startDate,
+      endDate,
+      interests,
+      stops,
+    });
+    Alert.alert("Saved!", "Trip saved.");
+  }, [GOOGLE_PLACES_API_KEY, places, selectedIds, cityOrArea, radiusMiles, startDate, endDate, interests]);
+
   // ── Save / export ────────────────────────────────────────────────────────
   const saveFinalTrip = useCallback(async () => {
     if (!finalStops || finalStops.length === 0) return;
@@ -324,6 +358,7 @@ export function useAddTrip() {
     // place search
     busy, places, selectedIds,
     toggle, generate,
+    exportSelectedRoute, saveSelectedTrip,
     // route
     finalStops,
     buildFromSelected,

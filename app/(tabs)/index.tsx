@@ -1,7 +1,10 @@
 import { CurrentTripCard } from "@/components/home/CurrentTripCard";
+import { JoinTripModal } from "@/components/home/JoinTripModal";
+import { TripActionsMenu } from "@/components/home/TripActionsMenu";
 import { UpcomingTripCard } from "@/components/home/UpcomingTripCard";
 import { useTrips } from "@/context/TripsContext";
 import { useRouter } from "expo-router";
+import { useState } from "react";
 import { ActivityIndicator, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { ItineraryModel } from "@/src/models";
@@ -29,6 +32,7 @@ export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { trips, loading, selectTrip } = useTrips();
+  const [joinModalVisible, setJoinModalVisible] = useState(false);
 
   const currentTrip = trips.find((t) => t.status === "current") ?? null;
   const upcomingTrips = trips.filter((t) => t.status === "upcoming");
@@ -53,7 +57,7 @@ export default function HomeScreen() {
       ) : (
         <>
           {/* Current Trip */}
-          {currentTrip ? (
+          {currentTrip && (
             <CurrentTripCard
               imageSource={tripImage(currentTrip)}
               tripName={currentTrip.title}
@@ -62,16 +66,12 @@ export default function HomeScreen() {
               days={dayCount(currentTrip.startDate, currentTrip.endDate)}
               onPress={() => openTrip(currentTrip.id)}
             />
-          ) : (
-            <View className="w-full rounded-[32px] bg-gray-100 items-center justify-center" style={{ height: 288 }}>
-              <Text className="text-gray-400 text-base">No active trip</Text>
-            </View>
           )}
 
           {/* Upcoming Journeys */}
           {upcomingTrips.length > 0 && (
-            <View className="mt-12">
-              <Text className="text-zinc-900 text-2xl font-bold mb-8">Upcoming Journeys</Text>
+            <View className={currentTrip ? "mt-12" : "mt-0"}>
+              <Text className="text-zinc-900 text-2xl font-bold mb-8">Upcoming Trips</Text>
               {upcomingTrips.map((trip) => (
                 <UpcomingTripCard
                   key={trip.id}
@@ -89,6 +89,20 @@ export default function HomeScreen() {
               <Text className="text-gray-400 text-base">No trips yet. Add one to get started!</Text>
             </View>
           )}
+
+          <TripActionsMenu
+            onJoinTrip={() => setJoinModalVisible(true)}
+            onCreateTrip={() => router.push("/(tabs)/addTrip" as never)}
+          />
+
+          <JoinTripModal
+            visible={joinModalVisible}
+            onClose={() => setJoinModalVisible(false)}
+            onJoined={(id) => {
+              setJoinModalVisible(false);
+              openTrip(id);
+            }}
+          />
         </>
       )}
     </ScrollView>

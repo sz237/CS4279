@@ -9,14 +9,24 @@ import {
   Platform,
   TouchableWithoutFeedback,
   Keyboard,
+  ScrollView,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { Activity } from "./ActivityCard";
+
+export interface ManualStopInput {
+  name: string;
+  address: string;
+  timeLabel: string;
+  duration: string;
+}
+
+const TIME_OPTIONS = ["Morning", "Noon", "Evening", "Night"] as const;
+type TimeOption = (typeof TIME_OPTIONS)[number];
 
 interface AddActivityModalProps {
   visible: boolean;
   onClose: () => void;
-  onAdd: (activity: Omit<Activity, "id">) => void;
+  onAdd: (input: ManualStopInput) => void;
 }
 
 export default function AddActivityModal({
@@ -24,24 +34,23 @@ export default function AddActivityModal({
   onClose,
   onAdd,
 }: AddActivityModalProps) {
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [time, setTime] = useState("");
+  const [name, setName] = useState("");
+  const [address, setAddress] = useState("");
+  const [timeLabel, setTimeLabel] = useState<TimeOption | "">("");
   const [duration, setDuration] = useState("");
 
   const handleAdd = () => {
-    if (!title.trim()) return;
+    if (!name.trim()) return;
     onAdd({
-      title: title.trim(),
-      description: description.trim() || "No description",
-      time: time.trim() || "TBD",
-      duration: duration.trim() || "1 hour",
+      name: name.trim(),
+      address: address.trim(),
+      timeLabel: timeLabel,
+      duration: duration.trim(),
     });
-    setTitle("");
-    setDescription("");
-    setTime("");
+    setName("");
+    setAddress("");
+    setTimeLabel("");
     setDuration("");
-    onClose();
   };
 
   return (
@@ -56,7 +65,11 @@ export default function AddActivityModal({
           <KeyboardAvoidingView
             behavior={Platform.OS === "ios" ? "padding" : "height"}
           >
-            <View className="bg-white rounded-t-3xl px-6 pt-4 pb-10">
+            <ScrollView
+              className="bg-white rounded-t-3xl"
+              contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 16, paddingBottom: 40 }}
+              keyboardShouldPersistTaps="handled"
+            >
               {/* Handle */}
               <View className="w-10 h-1 bg-gray-200 rounded-full self-center mb-4" />
 
@@ -73,33 +86,54 @@ export default function AddActivityModal({
               <InputField
                 label="Activity Name *"
                 placeholder="e.g. Pfeiffer Beach"
-                value={title}
-                onChangeText={setTitle}
+                value={name}
+                onChangeText={setName}
               />
               <InputField
-                label="Description"
-                placeholder="e.g. Purple sand beach at sunset"
-                value={description}
-                onChangeText={setDescription}
+                label="Address"
+                placeholder="e.g. 1 Scenic Rd, Big Sur, CA"
+                value={address}
+                onChangeText={setAddress}
               />
-              <View className="flex-row gap-3">
-                <View className="flex-1">
-                  <InputField
-                    label="Time"
-                    placeholder="e.g. 4:00 PM"
-                    value={time}
-                    onChangeText={setTime}
-                  />
-                </View>
-                <View className="flex-1">
-                  <InputField
-                    label="Duration"
-                    placeholder="e.g. 2 hours"
-                    value={duration}
-                    onChangeText={setDuration}
-                  />
+
+              {/* Time of day picker */}
+              <View className="mb-4">
+                <Text className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                  Time of Day
+                </Text>
+                <View className="flex-row gap-2">
+                  {TIME_OPTIONS.map((option) => {
+                    const isSelected = timeLabel === option;
+                    return (
+                      <TouchableOpacity
+                        key={option}
+                        onPress={() => setTimeLabel(isSelected ? "" : option)}
+                        activeOpacity={0.75}
+                        className={`flex-1 py-2 rounded-xl items-center border ${
+                          isSelected
+                            ? "bg-violet-600 border-violet-600"
+                            : "bg-gray-50 border-gray-200"
+                        }`}
+                      >
+                        <Text
+                          className={`text-xs font-semibold ${
+                            isSelected ? "text-white" : "text-gray-500"
+                          }`}
+                        >
+                          {option}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
                 </View>
               </View>
+
+              <InputField
+                label="Duration"
+                placeholder="e.g. 2 hours"
+                value={duration}
+                onChangeText={setDuration}
+              />
 
               <TouchableOpacity
                 onPress={handleAdd}
@@ -110,7 +144,7 @@ export default function AddActivityModal({
                   Add to Itinerary
                 </Text>
               </TouchableOpacity>
-            </View>
+            </ScrollView>
           </KeyboardAvoidingView>
         </View>
       </TouchableWithoutFeedback>

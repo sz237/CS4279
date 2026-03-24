@@ -47,12 +47,23 @@ export function stopToActivity(
   };
 }
 
+export async function geocodeCity(
+  apiKey: string,
+  city: string
+): Promise<{ lat: number; lng: number } | null> {
+  const resp = await searchText({ apiKey, textQuery: city, maxResultCount: 1 });
+  const p = resp.places?.[0];
+  if (p?.location) return { lat: p.location.latitude, lng: p.location.longitude };
+  return null;
+}
+
 export async function searchPlaces(
   apiKey: string,
   textQuery: string,
-  maxResultCount: number
+  maxResultCount: number,
+  locationBias?: { center: { lat: number; lng: number }; radiusMeters: number }
 ): Promise<PlaceV1[]> {
-  const resp = await searchText({ apiKey, textQuery, maxResultCount });
+  const resp = await searchText({ apiKey, textQuery, maxResultCount, locationBias });
   return (resp.places ?? []).filter(
     (p) =>
       typeof p.location?.latitude === "number" &&
