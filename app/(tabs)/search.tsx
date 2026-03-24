@@ -8,9 +8,12 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  TouchableOpacity,
   View,
 } from "react-native";
 import { placeDetails, placesTextSearch } from "@/lib/googleplaces";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { LinearGradient } from "expo-linear-gradient";
 
 type SearchResult = {
   id: string;
@@ -27,6 +30,7 @@ type ReviewSnippet = {
 };
 
 export default function SearchScreen() {
+  const insets = useSafeAreaInsets();
   const [location, setLocation] = useState("");
   const [activity, setActivity] = useState("");
   const [submittedQuery, setSubmittedQuery] = useState("");
@@ -115,20 +119,64 @@ export default function SearchScreen() {
     setItineraryIds((prev) => (prev.includes(placeId) ? prev : [...prev, placeId]));
   }, []);
 
+  const fieldLabel = {
+    fontSize: 10,
+    fontWeight: "700" as const,
+    color: "#525252",
+    textTransform: "uppercase" as const,
+    letterSpacing: 0.8,
+    marginBottom: 6,
+    marginLeft: 4,
+  };
+
+  const inputBox = {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    backgroundColor: "#F4F4F5",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "rgba(212,212,216,0.3)",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 8,
+  };
+
   return (
     <View style={styles.screen}>
-      <View style={styles.header}>
-        <Text style={styles.heading}>Find Activities</Text>
-        <Text style={styles.subheading}>
-          Search by location and optional activity type.
+      {/* ── Search card ── */}
+      <View
+        style={{
+          backgroundColor: "#FFFFFF",
+          paddingHorizontal: 24,
+          paddingTop: insets.top + 16,
+          paddingBottom: 28,
+          shadowColor: "#191C1D",
+          shadowOffset: { width: 0, height: 12 },
+          shadowOpacity: 0.06,
+          shadowRadius: 40,
+          elevation: 8,
+        }}
+      >
+        <Text
+          style={{
+            fontSize: 24,
+            fontWeight: "600",
+            color: "#18181B",
+            marginBottom: 24,
+          }}
+        >
+          Explore
         </Text>
 
-        <View style={styles.searchCard}>
-          <View style={styles.inputRow}>
-            <Ionicons name="location-outline" size={18} color="#6B7280" />
+        {/* DESTINATION */}
+        <View style={{ marginBottom: 16 }}>
+          <Text style={fieldLabel}>Destination</Text>
+          <View style={inputBox}>
+            <Ionicons name="location-outline" size={16} color="#6D28D9" />
             <TextInput
-              style={styles.input}
-              placeholder="Location (e.g. Austin, TX)"
+              style={{ flex: 1, fontSize: 14, fontWeight: "500", color: "#18181B" }}
+              placeholder="City, State, or Area"
+              placeholderTextColor="#A1A1AA"
               value={location}
               onChangeText={setLocation}
               autoCorrect={false}
@@ -136,12 +184,21 @@ export default function SearchScreen() {
               onSubmitEditing={runSearch}
             />
           </View>
+        </View>
 
-          <View style={styles.inputRow}>
-            <Ionicons name="walk-outline" size={18} color="#6B7280" />
+        {/* INTERESTS (OPTIONAL) */}
+        <View style={{ marginBottom: 24 }}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginBottom: 6, marginLeft: 4 }}>
+            <Text style={[fieldLabel, { marginBottom: 0, marginLeft: 0 }]}>Interests</Text>
+            <Text style={{ fontSize: 10, fontWeight: "700", color: "#A1A1AA", textTransform: "uppercase", letterSpacing: 0.8 }}>
+              (optional)
+            </Text>
+          </View>
+          <View style={inputBox}>
             <TextInput
-              style={styles.input}
-              placeholder="Activity (optional, e.g. hiking)"
+              style={{ flex: 1, fontSize: 14, fontWeight: "500", color: "#18181B" }}
+              placeholder="Matcha, Coffee, Run"
+              placeholderTextColor="#A1A1AA"
               value={activity}
               onChangeText={setActivity}
               autoCorrect={false}
@@ -149,18 +206,36 @@ export default function SearchScreen() {
               onSubmitEditing={runSearch}
             />
           </View>
+        </View>
 
-          <Pressable
-            style={[styles.searchButton, !canSearch && styles.searchButtonDisabled]}
+        {/* Divider + Search button */}
+        <View
+          style={{
+            borderTopWidth: 1,
+            borderTopColor: "#E5E7EB",
+            paddingTop: 20,
+          }}
+        >
+          <TouchableOpacity
             onPress={runSearch}
             disabled={!canSearch}
+            activeOpacity={0.88}
+            style={{ borderRadius: 12, overflow: "hidden", alignSelf: "flex-start", opacity: canSearch ? 1 : 0.5 }}
           >
-            <Text style={styles.searchButtonText}>
-              {busy ? "Searching..." : "Search Activities"}
-            </Text>
-          </Pressable>
-
-          {!!error && <Text style={styles.errorText}>{error}</Text>}
+            <LinearGradient
+              colors={["#6D28D9", "#7C3AED"]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={{ paddingVertical: 10, paddingHorizontal: 28 }}
+            >
+              <Text style={{ fontSize: 14, fontWeight: "700", color: "#FFFFFF" }}>
+                {busy ? "Searching…" : "Search"}
+              </Text>
+            </LinearGradient>
+          </TouchableOpacity>
+          {!!error && (
+            <Text style={{ marginTop: 10, color: "#B91C1C", fontSize: 13 }}>{error}</Text>
+          )}
         </View>
       </View>
 
@@ -275,68 +350,6 @@ export default function SearchScreen() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-  },
-  header: {
-    backgroundColor: "#FFFFFF",
-    borderBottomWidth: 1,
-    borderBottomColor: "#E5E7EB",
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 12,
-  },
-  heading: {
-    fontSize: 24,
-    fontWeight: "700",
-    color: "#111827",
-  },
-  subheading: {
-    marginTop: 4,
-    color: "#6B7280",
-    fontSize: 14,
-  },
-  searchCard: {
-    marginTop: 12,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    borderRadius: 16,
-    padding: 12,
-    backgroundColor: "#FFFFFF",
-  },
-  inputRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    borderRadius: 12,
-    paddingHorizontal: 10,
-    marginBottom: 10,
-    backgroundColor: "#F9FAFB",
-  },
-  input: {
-    flex: 1,
-    fontSize: 15,
-    color: "#111827",
-    paddingVertical: 10,
-    paddingLeft: 8,
-  },
-  searchButton: {
-    backgroundColor: "#111827",
-    paddingVertical: 12,
-    borderRadius: 12,
-    alignItems: "center",
-  },
-  searchButtonDisabled: {
-    backgroundColor: "#9CA3AF",
-  },
-  searchButtonText: {
-    color: "#FFFFFF",
-    fontWeight: "700",
-    fontSize: 15,
-  },
-  errorText: {
-    marginTop: 8,
-    color: "#B91C1C",
-    fontSize: 13,
   },
   resultsContainer: {
     flex: 1,

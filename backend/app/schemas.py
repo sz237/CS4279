@@ -67,3 +67,28 @@ class ItineraryStop(BaseModel):
 
 class BuildItineraryResponse(BaseModel):
     ordered: List[ItineraryStop]
+
+
+class SuggestItineraryRequest(BaseModel):
+    city: str
+    interests: List[str]
+    start_date: str           # "YYYY-MM-DD"
+    end_date: str             # "YYYY-MM-DD"
+    radius_miles: Optional[float] = None
+
+
+class AIActivity(BaseModel):
+    name: str                 # exact real place name
+    time: str                 # "09:00"
+    duration_minutes: int     # 30
+    category: str             # "breakfast"|"attraction"|"lunch"|"dinner"|"break"|"nightlife"
+    travel_mode: str = "drive"  # "walk"|"transit"|"drive" — optimal mode to NEXT stop
+
+
+class AIDay(BaseModel):
+    date: str                 # "2026-04-01"
+    activities: List[AIActivity]
+
+
+class SuggestItineraryResponse(BaseModel):
+    days: List[AIDay]

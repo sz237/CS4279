@@ -13,31 +13,18 @@ import MapView, { Marker, Polyline } from "react-native-maps";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { ItinerarySheetContext } from "@/lib/ItinerarySheetContext";
+import { useTrips } from "@/context/TripsContext";
+import { useStops } from "@/hooks/useStops";
 
-const STOPS = [
-  {
-    id: "times_square",
-    coordinate: { latitude: 40.7580, longitude: -73.9855 },
-    title: "Times Square",
-  },
-  {
-    id: "central_park",
-    coordinate: { latitude: 40.7829, longitude: -73.9654 },
-    title: "Central Park",
-  },
-  {
-    id: "statue_of_liberty",
-    coordinate: { latitude: 40.6892, longitude: -74.0445 },
-    title: "Statue of Liberty",
-  },
-  {
-    id: "brooklyn_bridge",
-    coordinate: { latitude: 40.7061, longitude: -73.9969 },
-    title: "Brooklyn Bridge",
-  },
-];
-
-const ROUTE_COORDS = STOPS.map((s) => s.coordinate);
+function formatDateRange(start: string, end: string): string {
+  const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const s = new Date(start + "T00:00:00");
+  const e = new Date(end + "T00:00:00");
+  if (s.getFullYear() === e.getFullYear() && s.getMonth() === e.getMonth()) {
+    return `${MONTHS[s.getMonth()]} ${s.getDate()}–${e.getDate()}, ${s.getFullYear()}`;
+  }
+  return `${MONTHS[s.getMonth()]} ${s.getDate()} – ${MONTHS[e.getMonth()]} ${e.getDate()}, ${e.getFullYear()}`;
+}
 
 const TABS = [
   { label: "Overview",  seg: "overview"  },
@@ -55,6 +42,25 @@ export default function ItineraryLayout() {
   const pathname = usePathname();
   const activeSeg = pathname.split("/").pop() as TabSeg | string;
 
+  const { trips, selectedTripId } = useTrips();
+  const trip = trips.find((t) => t.id === selectedTripId) ?? null;
+  const { stops } = useStops(selectedTripId);
+
+  const mapStops = stops.map((s) => ({
+    id: s.id,
+    coordinate: { latitude: s.lat, longitude: s.lng },
+    title: s.name,
+  }));
+  const routeCoords = mapStops.map((s) => s.coordinate);
+
+  // Compute map center from stops mean, fall back to a default
+  const mapCenter = stops.length > 0
+    ? {
+        latitude: stops.reduce((sum, s) => sum + s.lat, 0) / stops.length,
+        longitude: stops.reduce((sum, s) => sum + s.lng, 0) / stops.length,
+      }
+    : { latitude: 40.7580, longitude: -73.9855 };
+
   const { height: SCREEN_HEIGHT } = useWindowDimensions();
 
   // Minimum map height: the larger of 256 px or 1/3 of the screen
@@ -64,13 +70,17 @@ export default function ItineraryLayout() {
   // (measured once the layout settles; falls back to a percentage until then)
   const [containerHeight, setContainerHeight] = useState(0);
 
-  // stickyHeaderHeight: reported by SheetStickyHeader via context
+  // stickyHeaderHeight: reported by the active tab's sticky header via context
   const [stickyHeaderHeight, setStickyHeaderHeight] = useState(80);
 
-  // MAP_MAX: map can expand until the sheet shows exactly the drag handle + sticky header
+  // tabBarHeight: measured from the pill tab bar rendered inside the sheet
+  const [tabBarHeight, setTabBarHeight] = useState(68);
+
+  // MAP_MAX: map can expand until the sheet shows exactly:
+  //   drag handle + sticky header + tab bar (modal stops at the toggle line)
   const MAP_MAX =
     containerHeight > 0
-      ? containerHeight - DRAG_HANDLE_HEIGHT - stickyHeaderHeight
+      ? containerHeight - DRAG_HANDLE_HEIGHT - stickyHeaderHeight - tabBarHeight
       : Math.floor(SCREEN_HEIGHT * 0.62);
 
   // Keep refs in sync so the PanResponder closure always uses the latest values
@@ -131,8 +141,12 @@ export default function ItineraryLayout() {
       {/* ── Trip header ─────────────────────────────────────────────── */}
       <View className="flex-row items-center justify-between px-5 pt-1 pb-2">
         <View>
-          <Text className="text-2xl font-bold text-gray-900">Big Apple Vacay 🍎</Text>
-          <Text className="text-sm text-gray-400 mt-0.5">March 21–25, 2025</Text>
+          <Text className="text-2xl font-bold text-gray-900">
+            {trip?.title ?? "Your Trip"}
+          </Text>
+          <Text className="text-sm text-gray-400 mt-0.5">
+            {trip ? formatDateRange(trip.startDate, trip.endDate) : ""}
+          </Text>
         </View>
       </View>
 
@@ -145,26 +159,26 @@ export default function ItineraryLayout() {
         <Animated.View style={{ height: mapHeightAnim, overflow: "hidden" }}>
           <MapView
             style={{ flex: 1 }}
-
             initialRegion={{
-              latitude: 40.7580,
-              longitude: -73.9855,
+              latitude: mapCenter.latitude,
+              longitude: mapCenter.longitude,
               latitudeDelta: 0.12,
               longitudeDelta: 0.12,
             }}
-
             mapType="standard"
             showsUserLocation={false}
             scrollEnabled={false}
             zoomEnabled={false}
           >
-            <Polyline
-              coordinates={ROUTE_COORDS}
-              strokeColor="#7C3AED"
-              strokeWidth={3}
-              lineDashPattern={[8, 4]}
-            />
-            {STOPS.map((stop, index) => (
+            {routeCoords.length > 1 && (
+              <Polyline
+                coordinates={routeCoords}
+                strokeColor="#7C3AED"
+                strokeWidth={3}
+                lineDashPattern={[8, 4]}
+              />
+            )}
+            {mapStops.map((stop, index) => (
               <Marker key={stop.id} coordinate={stop.coordinate} title={stop.title}>
                 <View
                   className="bg-violet-600 w-7 h-7 rounded-full items-center justify-center border-2 border-white"
@@ -188,71 +202,89 @@ export default function ItineraryLayout() {
           style={{
             flex: 1,
             backgroundColor: "white",
-            borderTopLeftRadius: 20,
-            borderTopRightRadius: 20,
+            borderTopLeftRadius: 40,
+            borderTopRightRadius: 40,
             shadowColor: "#000",
-            shadowOffset: { width: 0, height: -3 },
-            shadowOpacity: 0.08,
-            shadowRadius: 6,
-            elevation: 10,
+            shadowOffset: { width: 0, height: -20 },
+            shadowOpacity: 0.10,
+            shadowRadius: 50,
+            elevation: 20,
             overflow: "hidden",
           }}
         >
-          {/* Drag handle — the only touch target for the pan gesture */}
+          {/* Drag handle */}
           <View
             {...panResponder.panHandlers}
             style={{
               alignItems: "center",
-              paddingTop: 10,
+              paddingTop: 16,
               paddingBottom: 8,
               backgroundColor: "white",
             }}
           >
             <View
               style={{
-                width: 40,
-                height: 4,
-                backgroundColor: "#D1D5DB",
-                borderRadius: 2,
+                width: 48,
+                height: 6,
+                backgroundColor: "#E4E4E7",
+                borderRadius: 3,
               }}
             />
           </View>
 
-          {/* Tab content — context lets child routes report their header height */}
+          {/* Tab content */}
           <ItinerarySheetContext.Provider value={{ reportStickyHeaderHeight }}>
             <View style={{ flex: 1 }}>
               <Slot />
             </View>
           </ItinerarySheetContext.Provider>
-        </View>
-      </View>
 
-      {/* ── Bottom 3-tab navigation ──────────────────────────────────── */}
-      <View className="bg-white border-t border-gray-100 px-4 pt-3 pb-4">
-        <View className="flex-row bg-gray-100 rounded-full p-1">
-          {TABS.map((tab) => {
-            const isActive = activeSeg === tab.seg;
-            return (
-              <TouchableOpacity
-                key={tab.seg}
-                onPress={() =>
-                  router.replace(`/(tabs)/itinerary/${tab.seg}` as never)
-                }
-                className={`flex-1 py-2 items-center rounded-full ${
-                  isActive ? "bg-violet-600" : ""
-                }`}
-                activeOpacity={0.8}
-              >
-                <Text
-                  className={`text-sm font-semibold ${
-                    isActive ? "text-white" : "text-gray-500"
-                  }`}
-                >
-                  {tab.label}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
+          {/* ── Pill tab bar — inside the sheet ── */}
+          <View
+            style={{ paddingHorizontal: 24, paddingBottom: 20, paddingTop: 8 }}
+            onLayout={(e) => setTabBarHeight(e.nativeEvent.layout.height)}
+          >
+            <View
+              style={{
+                flexDirection: "row",
+                backgroundColor: "rgba(244,244,245,0.95)",
+                borderRadius: 999,
+                padding: 4,
+                borderWidth: 1,
+                borderColor: "rgba(255,255,255,0.5)",
+              }}
+            >
+              {TABS.map((tab) => {
+                const isActive = activeSeg === tab.seg;
+                return (
+                  <TouchableOpacity
+                    key={tab.seg}
+                    onPress={() =>
+                      router.replace(`/(tabs)/itinerary/${tab.seg}` as never)
+                    }
+                    activeOpacity={0.8}
+                    style={{
+                      flex: 1,
+                      paddingVertical: 10,
+                      alignItems: "center",
+                      borderRadius: 999,
+                      backgroundColor: isActive ? "#6D28D9" : "transparent",
+                    }}
+                  >
+                    <Text
+                      style={{
+                        fontSize: 14,
+                        fontWeight: "700",
+                        color: isActive ? "#FFFFFF" : "#71717A",
+                      }}
+                    >
+                      {tab.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
         </View>
       </View>
     </SafeAreaView>
