@@ -1,9 +1,11 @@
+import { EditTripModal } from "@/components/itinerary/EditTripModal";
 import { MemberChip } from "@/components/itinerary/MemberChip";
 import { useItinerarySheet } from "@/lib/ItinerarySheetContext";
 import { useTrips } from "@/context/TripsContext";
+import { updateItinerary } from "@/src/services/trips";
 import { Ionicons } from "@expo/vector-icons";
-import { Pressable, ScrollView, Share, Text, View } from "react-native";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { Pressable, ScrollView, Share, Text, TextInput, View } from "react-native";
 
 function formatDateRange(start: string, end: string): string {
   const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
@@ -23,9 +25,44 @@ export default function OverviewScreen() {
   const { trips, selectedTripId } = useTrips();
   const trip = trips.find((t) => t.id === selectedTripId) ?? null;
 
+  const [editVisible, setEditVisible] = useState(false);
+  const [notesEditMode, setNotesEditMode] = useState(false);
+  const [notes, setNotes] = useState(trip?.notes ?? "");
+  const [notesDraft, setNotesDraft] = useState(trip?.notes ?? "");
+  const [notesSaving, setNotesSaving] = useState(false);
   const members = trip?.memberUsernames ?? [];
   const dateRange = trip ? formatDateRange(trip.startDate, trip.endDate) : "";
   const inviteCode = trip?.inviteCode ?? null;
+
+  // Sync notes if trip changes (e.g. real-time update from another member)
+  useEffect(() => {
+    if (!notesEditMode) {
+      setNotes(trip?.notes ?? "");
+      setNotesDraft(trip?.notes ?? "");
+    }
+  }, [trip?.notes]);
+
+  function handleNotesEdit() {
+    setNotesDraft(notes);
+    setNotesEditMode(true);
+  }
+
+  function handleNotesCancel() {
+    setNotesDraft(notes);
+    setNotesEditMode(false);
+  }
+
+  async function handleNotesSave() {
+    if (!trip || notesSaving) return;
+    setNotesSaving(true);
+    try {
+      await updateItinerary(trip.id, { notes: notesDraft.trim() || null });
+      setNotes(notesDraft);
+      setNotesEditMode(false);
+    } finally {
+      setNotesSaving(false);
+    }
+  }
 
   async function shareCode() {
     if (!inviteCode) return;
@@ -63,6 +100,7 @@ export default function OverviewScreen() {
 
           {/* Subtle edit button */}
           <Pressable
+            onPress={() => setEditVisible(true)}
             className="w-8 h-8 rounded-full bg-gray-100 items-center justify-center mt-1"
             accessibilityLabel="Edit trip"
           >
@@ -129,7 +167,65 @@ export default function OverviewScreen() {
             </View>
           </View>
         )}
+
+        {/* Notes */}
+        <View className="mt-7">
+          <View className="flex-row items-center justify-between mb-3">
+            <Text className="text-lg font-bold text-zinc-900">Notes</Text>
+            {!notesEditMode && (
+              <Pressable onPress={handleNotesEdit} className="flex-row items-center gap-1">
+                <Ionicons name="pencil-outline" size={14} color="#6D28D9" />
+                <Text className="text-violet-700 text-xs font-bold">Edit</Text>
+              </Pressable>
+            )}
+          </View>
+
+          {notesEditMode ? (
+            <>
+              <TextInput
+                value={notesDraft}
+                onChangeText={setNotesDraft}
+                placeholder="Add notes for the group…"
+                placeholderTextColor="#A1A1AA"
+                multiline
+                autoFocus
+                className="bg-gray-100 rounded-xl px-4 py-3 text-zinc-900 text-sm mb-3"
+                style={{ minHeight: 100, textAlignVertical: "top" }}
+              />
+              <View className="flex-row gap-2">
+                <Pressable
+                  onPress={handleNotesCancel}
+                  className="flex-1 border border-gray-300 rounded-xl py-3 items-center"
+                >
+                  <Text className="text-zinc-600 text-sm font-semibold">Cancel</Text>
+                </Pressable>
+                <Pressable
+                  onPress={handleNotesSave}
+                  disabled={notesSaving}
+                  className="flex-1 bg-violet-600 rounded-xl py-3 items-center"
+                >
+                  <Text className="text-white text-sm font-semibold">
+                    {notesSaving ? "Saving…" : "Save"}
+                  </Text>
+                </Pressable>
+              </View>
+            </>
+          ) : (
+            <Pressable onPress={handleNotesEdit} className="bg-gray-100 rounded-xl px-4 py-3" style={{ minHeight: 80 }}>
+              <Text className={`text-sm ${notes ? "text-zinc-900" : "text-zinc-400"}`}>
+                {notes || "Add notes for the group…"}
+              </Text>
+            </Pressable>
+          )}
+        </View>
       </ScrollView>
+      {trip && (
+        <EditTripModal
+          visible={editVisible}
+          trip={trip}
+          onClose={() => setEditVisible(false)}
+        />
+      )}
     </View>
   );
 }
