@@ -45,6 +45,23 @@ export async function getUserItineraries(): Promise<ItineraryModel[]> {
 // ─── Joining ──────────────────────────────────────────────────────────────────
 
 /**
+ * Find an itinerary by its invite code without joining.
+ * Returns the itinerary if found, null if the code is invalid.
+ */
+export async function findItineraryByCode(
+  inviteCode: string
+): Promise<ItineraryModel | null> {
+  const q = query(
+    collection(db, "itineraries"),
+    where("inviteCode", "==", inviteCode),
+    limit(1)
+  );
+  const snap = await getDocs(q);
+  if (snap.empty) return null;
+  return snap.docs[0].data() as ItineraryModel;
+}
+
+/**
  * Find an itinerary by its invite code and add the current user as an editor.
  * Returns the itinerary if found, null if the code is invalid.
  */
@@ -131,10 +148,14 @@ function computeStatus(startDate: string, endDate: string): ItineraryStatus {
   return "upcoming";
 }
 
-function generateInviteCode(cityOrArea: string): string {
-  const prefix = cityOrArea.replace(/\s+/g, "").slice(0, 3).toUpperCase();
-  const suffix = Math.random().toString(36).slice(2, 6).toUpperCase();
-  return `${prefix}-${suffix}`;
+async function generateUniqueInviteCode(cityOrArea: string): Promise<string> {
+  const prefix = cityOrArea.replace(/[^A-Za-z0-9]/g, "").slice(0, 3).toUpperCase();
+  while (true) {
+    const suffix = Math.random().toString(36).slice(2, 6).toUpperCase();
+    const code = `${prefix}-${suffix}`;
+    const existing = await findItineraryByCode(code);
+    if (!existing) return code;
+  }
 }
 
 /**
@@ -158,6 +179,7 @@ export async function saveAiItinerary(
   );
 
   const stopIds = allActivities.map((_, i) => `${itineraryId}_stop_${i}`);
+  const inviteCode = await generateUniqueInviteCode(params.cityOrArea);
 
   const itinerary: ItineraryModel = {
     id: itineraryId,
@@ -171,7 +193,7 @@ export async function saveAiItinerary(
     stops: stopIds,
     memberUids: [user.uid],
     memberUsernames: [user.displayName ?? user.email ?? ""],
-    inviteCode: generateInviteCode(params.cityOrArea),
+    inviteCode,
     status: computeStatus(params.startDate, params.endDate),
     accommodation: null,
     notes: null,
@@ -201,6 +223,7 @@ export async function saveAiItinerary(
       types: act.types ?? [],
       briefSummary: null,
       travelMode: act.aiTravelMode ?? null,
+      travelMinutes: act.aiCommuteMinutes ?? null,
       category: act.aiCategory ?? null,
     };
     await saveStop(itineraryId, stop);

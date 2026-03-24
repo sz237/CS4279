@@ -74,6 +74,7 @@ export interface StopModel {
   briefSummary: string | null;
 
   // AI trip planning metadata
-  travelMode: string | null; // "walking" / "driving" / "transit" to the next stop
-  category: string | null;   // e.g. "coffee shop", "restaurant", "attraction"
+  travelMode: string | null;    // "walking" / "driving" / "transit" to the next stop
+  travelMinutes: number | null; // estimated commute duration to the next stop
+  category: string | null;      // e.g. "coffee shop", "restaurant", "attraction"
 }
