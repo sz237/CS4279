@@ -72,4 +72,8 @@ export interface StopModel {
 
   // AI-generated summary
   briefSummary: string | null;
+
+  // AI trip planning metadata
+  travelMode: string | null; // "walking" / "driving" / "transit" to the next stop
+  category: string | null;   // e.g. "coffee shop", "restaurant", "attraction"
 }

@@ -12,7 +12,8 @@ import {
   updateDoc,
   where,
 } from "firebase/firestore";
-import type { ItineraryModel, StopModel } from "@/src/models";
+import type { ItineraryModel, ItineraryStatus, StopModel } from "@/src/models";
+import type { AIDayResult } from "@/services/types";
 
 // ─── Itineraries ──────────────────────────────────────────────────────────────
 
@@ -111,4 +112,99 @@ export async function getStopsForDay(
   );
   const snap = await getDocs(q);
   return snap.docs.map((d) => d.data() as StopModel);
+}
+
+// ─── AI Itinerary Save ────────────────────────────────────────────────────────
+
+type SaveAiParams = {
+  cityOrArea: string;
+  radiusMiles: number | undefined;
+  startDate: string;
+  endDate: string;
+  interests: string[];
+};
+
+function computeStatus(startDate: string, endDate: string): ItineraryStatus {
+  const today = new Date().toISOString().slice(0, 10);
+  if (endDate < today) return "past";
+  if (startDate <= today) return "current";
+  return "upcoming";
+}
+
+function generateInviteCode(cityOrArea: string): string {
+  const prefix = cityOrArea.replace(/\s+/g, "").slice(0, 3).toUpperCase();
+  const suffix = Math.random().toString(36).slice(2, 6).toUpperCase();
+  return `${prefix}-${suffix}`;
+}
+
+/**
+ * Saves an AI-generated itinerary to Firestore.
+ * Writes the root ItineraryModel doc and a StopModel for every resolved activity.
+ * Returns the new itinerary ID.
+ */
+export async function saveAiItinerary(
+  params: SaveAiParams,
+  aiDays: AIDayResult[]
+): Promise<string> {
+  const user = auth.currentUser;
+  if (!user) throw new Error("Must be signed in to save an itinerary.");
+
+  const itineraryId = doc(collection(db, "itineraries")).id;
+  const now = new Date().toISOString();
+
+  // Flatten all activities to build the ordered stop list
+  const allActivities = aiDays.flatMap((day) =>
+    day.activities.map((act) => ({ ...act, day: day.date }))
+  );
+
+  const stopIds = allActivities.map((_, i) => `${itineraryId}_stop_${i}`);
+
+  const itinerary: ItineraryModel = {
+    id: itineraryId,
+    ownerUid: user.uid,
+    title: `${params.cityOrArea} Trip`,
+    cityOrArea: params.cityOrArea,
+    startDate: params.startDate,
+    endDate: params.endDate,
+    radiusMiles: params.radiusMiles ?? null,
+    interests: params.interests,
+    stops: stopIds,
+    memberUids: [user.uid],
+    memberUsernames: [user.displayName ?? user.email ?? ""],
+    inviteCode: generateInviteCode(params.cityOrArea),
+    status: computeStatus(params.startDate, params.endDate),
+    accommodation: null,
+    notes: null,
+    stopCount: allActivities.length,
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  await saveItinerary(itinerary);
+
+  for (let i = 0; i < allActivities.length; i++) {
+    const act = allActivities[i];
+    const stop: StopModel = {
+      id: stopIds[i],
+      orderIndex: i,
+      day: act.day,
+      timeLabel: act.aiTime ?? null,
+      duration: act.aiDurationMinutes ? `${act.aiDurationMinutes} min` : null,
+      placeId: act.id,
+      name: act.name,
+      address: act.address ?? "",
+      photoUrl: act.imageUrl ?? null,
+      lat: act.lat,
+      lng: act.lng,
+      rating: act.rating ?? null,
+      userRatingCount: act.userRatingCount ?? null,
+      types: act.types ?? [],
+      briefSummary: null,
+      travelMode: act.aiTravelMode ?? null,
+      category: act.aiCategory ?? null,
+    };
+    await saveStop(itineraryId, stop);
+  }
+
+  return itineraryId;
 }

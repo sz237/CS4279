@@ -3,6 +3,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { signOut } from "firebase/auth";
 import { useState } from "react";
 import { Alert, Pressable, ScrollView, Switch, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 function SectionHeader({ title }: { title: string }) {
   return (
@@ -109,6 +110,7 @@ function MemberRow({ name, email }: { name: string; email: string }) {
 }
 
 export default function ProfileScreen() {
+  const insets = useSafeAreaInsets();
   const [pushEnabled, setPushEnabled] = useState(true);
   const [reminderEnabled, setReminderEnabled] = useState(true);
 
@@ -128,7 +130,7 @@ export default function ProfileScreen() {
         className="flex-1"
         contentContainerStyle={{
           paddingHorizontal: 20,
-          paddingTop: 16,
+          paddingTop: insets.top + 16,
           paddingBottom: 24,
         }}
         showsVerticalScrollIndicator={false}

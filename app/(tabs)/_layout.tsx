@@ -1,13 +1,32 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Tabs } from "expo-router";
+import { useColorScheme } from "react-native";
+import { AddTripProvider } from "@/context/AddTripContext";
+import { TripsProvider } from "@/context/TripsContext";
 
 export default function TabLayout() {
+  const scheme = useColorScheme();
+  const isDark = scheme === "dark";
+
   return (
-    <Tabs screenOptions={{ tabBarActiveTintColor: "white" }}>
+    <TripsProvider>
+    <AddTripProvider>
+    <Tabs
+      screenOptions={{
+        headerShown: false,
+        tabBarActiveTintColor: isDark ? "#FFFFFF" : "#18181B",
+        tabBarInactiveTintColor: isDark ? "#6B7280" : "#9CA3AF",
+        tabBarStyle: {
+          backgroundColor: isDark ? "#0F0F0F" : "#FFFFFF",
+          borderTopColor: isDark ? "#27272A" : "#F3F4F6",
+        },
+      }}
+    >
       <Tabs.Screen
         name="index"
         options={{
           title: "Home",
+          headerShown: false,
           tabBarIcon: ({ color }) => (
             <Ionicons name="home" size={28} color={color} />
           ),
@@ -70,5 +89,7 @@ export default function TabLayout() {
         }}
       />
     </Tabs>
+    </AddTripProvider>
+    </TripsProvider>
   );
 }

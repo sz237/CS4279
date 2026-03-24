@@ -1,3 +1,4 @@
+import { useColorScheme } from 'react-native';
 import { DarkTheme, DefaultTheme, type Theme } from '@react-navigation/native';
  
 export const THEME = {
@@ -55,6 +56,12 @@ export const THEME = {
   },
 };
  
+/** Returns the correct THEME token set for the current color scheme. */
+export function useAppTheme() {
+  const scheme = useColorScheme();
+  return THEME[scheme === 'dark' ? 'dark' : 'light'];
+}
+
 export const NAV_THEME: Record<'light' | 'dark', Theme> = {
   light: {
     ...DefaultTheme,

@@ -8,6 +8,7 @@ from app.schemas import (
     ChatRequest, ChatResponse,
     SummarizeReviewsRequest, SummarizeReviewsResponse,
     BuildItineraryRequest, BuildItineraryResponse, ItineraryStop,
+    SuggestItineraryRequest, SuggestItineraryResponse, AIActivity, AIDay,
 )
 from app.ollama_client import ollama_chat
 from app.route_opt import (
@@ -156,3 +157,90 @@ async def build_itinerary(req: BuildItineraryRequest):
         prev = (c.lat, c.lng)
 
     return BuildItineraryResponse(ordered=ordered_stops)
+
+
+@app.post("/ai-suggest-itinerary", response_model=SuggestItineraryResponse)
+async def ai_suggest_itinerary(req: SuggestItineraryRequest):
+    import json
+    import re
+
+    interests_str = ", ".join(req.interests) if req.interests else "general sightseeing"
+    radius_line = (
+        f"Stay within {req.radius_miles} miles of the city center.\n"
+        if req.radius_miles
+        else ""
+    )
+
+    user_prompt = (
+        f"Create a detailed day-by-day travel itinerary for {req.city} "
+        f"from {req.start_date} to {req.end_date}.\n"
+        f"Traveler interests: {interests_str}.\n"
+        f"{radius_line}"
+        "\nRules:\n"
+        "- Start each day with breakfast/coffee around 09:00, end with dinner around 19:00-21:00.\n"
+        "- Group geographically close activities on the same day to minimize travel.\n"
+        "- Order activities within each day to minimize backtracking.\n"
+        "- Use realistic duration_minutes per category:\n"
+        "  cafe/breakfast: 30-45, major museum/attraction: 90-150,\n"
+        "  small gallery/shop: 30-60, park: 45-90, restaurant: 60-90.\n"
+        "- travel_mode: the optimal transport mode to reach the NEXT activity. "
+        "Use exactly one of: \"walk\", \"transit\", or \"drive\".\n"
+        "- Mix anchor activities (main sights) with supporting ones (local cafes, nearby parks).\n"
+        "- Consider time-of-day: coffee in morning, attractions midday, dinner in evening.\n"
+        "- Do NOT overpack: max 5-6 activities per day.\n"
+        "- Each activity name must be the FULL proper name of a real, specific place.\n"
+        "\nReturn ONLY this JSON structure, no markdown, no extra text:\n"
+        '{"days": [{"date": "YYYY-MM-DD", "activities": [{"name": "Exact Place Name", '
+        '"time": "HH:MM", "duration_minutes": 60, "category": "attraction", '
+        '"travel_mode": "walk"}]}]}'
+    )
+
+    reply = await ollama_chat(
+        base_url=OLLAMA_BASE_URL,
+        model=OLLAMA_MODEL,
+        messages=[
+            {
+                "role": "system",
+                "content": (
+                    "You are a precise JSON generator for travel itineraries. "
+                    "Output ONLY valid JSON. No markdown fences. No commentary."
+                ),
+            },
+            {"role": "user", "content": user_prompt},
+        ],
+        timeout_s=90.0,
+    )
+
+    # Strip markdown fences if model adds them
+    cleaned = re.sub(r"```(?:json)?|```", "", reply).strip()
+
+    try:
+        data = json.loads(cleaned)
+    except Exception:
+        m = re.search(r"\{.*\}", cleaned, re.DOTALL)
+        try:
+            data = json.loads(m.group()) if m else {}
+        except Exception:
+            data = {}
+
+    days_raw = data.get("days", [])
+    days = []
+    for d in days_raw:
+        activities = []
+        for a in d.get("activities", []):
+            try:
+                raw_mode = str(a.get("travel_mode", "drive")).lower()
+                mode = raw_mode if raw_mode in ("walk", "transit", "drive") else "drive"
+                activities.append(AIActivity(
+                    name=str(a["name"]),
+                    time=str(a.get("time", "09:00")),
+                    duration_minutes=int(a.get("duration_minutes", 60)),
+                    category=str(a.get("category", "attraction")),
+                    travel_mode=mode,
+                ))
+            except Exception:
+                continue
+        if activities:
+            days.append(AIDay(date=str(d.get("date", "")), activities=activities))
+
+    return SuggestItineraryResponse(days=days)

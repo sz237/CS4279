@@ -30,6 +30,33 @@ export async function summarizeReviews(placeName: string, reviews: { author?: st
   }>("/summarize-reviews", { placeName, reviews });
 }
 
+export type AIActivityPayload = {
+  name: string;
+  time: string;
+  duration_minutes: number;
+  category: string;
+  travel_mode: string; // "walk" | "transit" | "drive"
+};
+
+export type AIDayPayload = {
+  date: string;
+  activities: AIActivityPayload[];
+};
+
+export type SuggestItineraryResult = {
+  days: AIDayPayload[];
+};
+
+export async function suggestItinerary(payload: {
+  city: string;
+  interests: string[];
+  start_date: string;
+  end_date: string;
+  radius_miles?: number;
+}): Promise<SuggestItineraryResult> {
+  return postJson<SuggestItineraryResult>("/ai-suggest-itinerary", payload);
+}
+
 export async function buildItinerary(payload: {
   start_lat: number;
   start_lng: number;
