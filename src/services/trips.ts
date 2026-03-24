@@ -22,6 +22,17 @@ export async function saveItinerary(itinerary: ItineraryModel): Promise<void> {
   await setDoc(doc(db, "itineraries", itinerary.id), itinerary);
 }
 
+/** Partially update an itinerary document. */
+export async function updateItinerary(
+  id: string,
+  fields: Partial<ItineraryModel>
+): Promise<void> {
+  await updateDoc(doc(db, "itineraries", id), {
+    ...fields,
+    updatedAt: new Date().toISOString(),
+  });
+}
+
 /** Fetch a single itinerary by ID. Returns null if not found. */
 export async function getItinerary(id: string): Promise<ItineraryModel | null> {
   const snap = await getDoc(doc(db, "itineraries", id));
