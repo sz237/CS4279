@@ -1,4 +1,3 @@
-import { EditTripModal } from "@/components/itinerary/EditTripModal";
 import { MemberChip } from "@/components/itinerary/MemberChip";
 import { useItinerarySheet } from "@/lib/ItinerarySheetContext";
 import { useTrips } from "@/context/TripsContext";
@@ -18,14 +17,13 @@ function formatDateRange(start: string, end: string): string {
 }
 
 export default function OverviewScreen() {
-  const { reportStickyHeaderHeight, setMapDay } = useItinerarySheet();
+  const { reportStickyHeaderHeight, setMapDay, openEditModal } = useItinerarySheet();
 
   // Reset map to show all stops when overview is active
   useEffect(() => { setMapDay(null); }, []);
   const { trips, selectedTripId } = useTrips();
   const trip = trips.find((t) => t.id === selectedTripId) ?? null;
 
-  const [editVisible, setEditVisible] = useState(false);
   const [notesEditMode, setNotesEditMode] = useState(false);
   const [notes, setNotes] = useState(trip?.notes ?? "");
   const [notesDraft, setNotesDraft] = useState(trip?.notes ?? "");
@@ -100,7 +98,7 @@ export default function OverviewScreen() {
 
           {/* Subtle edit button */}
           <Pressable
-            onPress={() => setEditVisible(true)}
+            onPress={openEditModal}
             className="w-8 h-8 rounded-full bg-gray-100 items-center justify-center mt-1"
             accessibilityLabel="Edit trip"
           >
@@ -219,13 +217,6 @@ export default function OverviewScreen() {
           )}
         </View>
       </ScrollView>
-      {trip && (
-        <EditTripModal
-          visible={editVisible}
-          trip={trip}
-          onClose={() => setEditVisible(false)}
-        />
-      )}
     </View>
   );
 }

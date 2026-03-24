@@ -122,9 +122,10 @@ export default function ItineraryTab() {
     setAddModalVisible(false);
   }, [selectedTripId, selectedDayId, stops.length]);
 
-  // Default to first day once days are available
+  // Default to first day once days are available, and reset if the selected day
+  // is no longer in range (e.g. after a date edit that shortened the trip).
   useEffect(() => {
-    if (days.length > 0 && !selectedDayId) {
+    if (days.length > 0 && !days.find((d) => d.id === selectedDayId)) {
       setSelectedDayId(days[0].id);
     }
   }, [days]);

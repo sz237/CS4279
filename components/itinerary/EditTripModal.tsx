@@ -70,7 +70,7 @@ export function EditTripModal({ visible, trip, onClose }: Props) {
   return (
     <>
       <Modal
-        visible={visible}
+        visible={visible && !datePickerVisible}
         animationType="slide"
         transparent
         onRequestClose={onClose}

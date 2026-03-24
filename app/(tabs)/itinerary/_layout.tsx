@@ -1,3 +1,4 @@
+import { EditTripModal } from "@/components/itinerary/EditTripModal";
 import { Slot, usePathname, useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -51,10 +52,24 @@ export default function ItineraryLayout() {
   // mapDay: null = show all stops (overview/explore), date string = filter to that day (itinerary tab)
   const [mapDay, setMapDay] = useState<string | null>(null);
 
+  // Reset mapDay if it falls outside the trip's (possibly updated) date range
+  useEffect(() => {
+    if (!mapDay || !trip) return;
+    if (mapDay < trip.startDate || mapDay > trip.endDate) {
+      setMapDay(null);
+    }
+  }, [trip?.startDate, trip?.endDate]);
+
+  // Only show stops whose day falls within the trip's current date range,
+  // so markers and the route line update immediately when dates change.
+  const rangeStops = trip
+    ? stops.filter((s) => s.day != null && s.day >= trip.startDate && s.day <= trip.endDate)
+    : stops;
+
   const visibleStops: StopModel[] =
     activeSeg === "itinerary" && mapDay
-      ? stops.filter((s) => s.day === mapDay)
-      : stops;
+      ? rangeStops.filter((s) => s.day === mapDay)
+      : rangeStops;
 
   const mapStops = visibleStops.map((s) => ({
     id: s.id,
@@ -114,8 +129,11 @@ export default function ItineraryLayout() {
   const [mapHeightAnim] = useState(() => new Animated.Value(MAP_MIN));
   const currentMapHeight = useRef(MAP_MIN);
 
+  const [editModalVisible, setEditModalVisible] = useState(false);
+
   const reportStickyHeaderHeight = useCallback((_h: number) => {}, []);
   const handleSetMapDay = useCallback((day: string | null) => setMapDay(day), []);
+  const handleOpenEditModal = useCallback(() => setEditModalVisible(true), []);
 
   // Track current region so zoom buttons can adjust deltas relative to current view
   const currentRegionRef = useRef({
@@ -314,7 +332,7 @@ export default function ItineraryLayout() {
           </View>
 
           {/* Tab content */}
-          <ItinerarySheetContext.Provider value={{ reportStickyHeaderHeight, setMapDay: handleSetMapDay }}>
+          <ItinerarySheetContext.Provider value={{ reportStickyHeaderHeight, setMapDay: handleSetMapDay, openEditModal: handleOpenEditModal }}>
             <View style={{ flex: 1 }}>
               <Slot />
             </View>
@@ -368,6 +386,13 @@ export default function ItineraryLayout() {
           </View>
         </View>
       </View>
+      {trip && (
+        <EditTripModal
+          visible={editModalVisible}
+          trip={trip}
+          onClose={() => setEditModalVisible(false)}
+        />
+      )}
     </SafeAreaView>
   );
 }
