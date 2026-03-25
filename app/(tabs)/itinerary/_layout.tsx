@@ -1,4 +1,5 @@
 import { EditTripModal } from "@/components/itinerary/EditTripModal";
+import { Ionicons } from "@expo/vector-icons";
 import { Slot, usePathname, useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -10,13 +11,12 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
 import MapView, { Marker, Polyline } from "react-native-maps";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { ItinerarySheetContext } from "@/lib/ItinerarySheetContext";
 import { useTrips } from "@/context/TripsContext";
 import { useStops } from "@/hooks/useStops";
+import { ItinerarySheetContext } from "@/lib/ItinerarySheetContext";
 import type { StopModel } from "@/src/models";
 
 function formatDateRange(start: string, end: string): string {
@@ -186,7 +186,7 @@ export default function ItineraryLayout() {
     })
   ).current;
 
-  // Redirect bare /itinerary → /itinerary/overview
+  // Redirect bare /itinerary -> /itinerary/overview
   useEffect(() => {
     const validSegs: string[] = ["overview", "activities", "explore"];
     if (!validSegs.includes(activeSeg ?? "")) {

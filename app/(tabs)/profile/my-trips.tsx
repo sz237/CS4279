@@ -9,6 +9,7 @@ import {
   setTripMeta,
   type LocalTripMeta,
 } from "@/src/services/profile";
+import { UI } from "@/src/theme/ui";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "expo-router";
@@ -165,33 +166,61 @@ export default function MyTripsScreen() {
   };
 
   return (
-    <View className="flex-1 bg-gray-50">
-      {/* Sticky header */}
+    <View className="flex-1" style={{ backgroundColor: UI.colors.pageBg }}>
       <View
         style={{
           paddingTop: insets.top - 48,
-          paddingHorizontal: 20,
+          paddingHorizontal: UI.spacing.pageX,
           paddingBottom: 12,
+          backgroundColor: UI.colors.pageBg,
+          borderBottomWidth: 1,
+          borderBottomColor: UI.colors.cardBorder,
         }}
-        className="border-b border-gray-200 bg-gray-50"
       >
-        <View className="flex-row items-center justify-between">
+        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
           <View>
-            <Text className="text-2xl font-bold text-gray-900">My Trips</Text>
-            <Text className="mt-1 text-sm text-slate-500">{sortedTrips.length} total</Text>
+            <Text
+              style={{
+                fontSize: UI.type.pageTitle,
+                fontWeight: "800",
+                color: UI.colors.textPrimary,
+              }}
+            >
+              My Trips
+            </Text>
+            <Text style={{ marginTop: 4, fontSize: UI.type.body, color: UI.colors.textSecondary }}>
+              {sortedTrips.length} total
+            </Text>
           </View>
 
           <TouchableOpacity
             onPress={selecting ? cancelSelecting : startSelecting}
             activeOpacity={0.85}
-            className="flex-row items-center justify-center rounded-2xl bg-white px-4 py-3"
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "center",
+              backgroundColor: UI.colors.cardBg,
+              borderRadius: UI.radius.button,
+              paddingHorizontal: 16,
+              paddingVertical: UI.spacing.buttonPaddingY,
+              borderWidth: 1,
+              borderColor: UI.colors.cardBorder,
+            }}
           >
             <Ionicons
               name={selecting ? "close-circle-outline" : "checkmark-done-outline"}
               size={18}
-              color="#111827"
+              color={UI.colors.textPrimary}
             />
-            <Text className="ml-2 font-medium text-gray-900">
+            <Text
+              style={{
+                marginLeft: 8,
+                fontSize: UI.type.body,
+                fontWeight: "500",
+                color: UI.colors.textPrimary,
+              }}
+            >
               {selecting ? "Cancel" : "Select Trips"}
             </Text>
           </TouchableOpacity>
@@ -200,9 +229,11 @@ export default function MyTripsScreen() {
 
       <ScrollView
         className="flex-1"
+        style={{ backgroundColor: UI.colors.pageBg }}
         contentContainerStyle={{
-          padding: 20,
-          paddingBottom: selecting ? 84 : 20,
+          paddingHorizontal: UI.spacing.pageX,
+          paddingTop: 16,
+          paddingBottom: selecting ? 84 : UI.spacing.pageBottom,
         }}
       >
         {sortedTrips.map((trip) => {
@@ -230,9 +261,13 @@ export default function MyTripsScreen() {
         })}
 
         {loadingMeta ? (
-          <Text className="mt-4 text-sm text-slate-400">Loading trips…</Text>
+          <Text style={{ marginTop: 16, fontSize: UI.type.body, color: UI.colors.textMuted }}>
+            Loading trips…
+          </Text>
         ) : sortedTrips.length === 0 ? (
-          <Text className="mt-4 text-sm text-slate-500">No trips found.</Text>
+          <Text style={{ marginTop: 16, fontSize: UI.type.body, color: UI.colors.textSecondary }}>
+            No trips found.
+          </Text>
         ) : null}
       </ScrollView>
 
@@ -240,25 +275,42 @@ export default function MyTripsScreen() {
         <View
           style={{
             paddingBottom: Math.max(insets.bottom, 6),
+            backgroundColor: UI.colors.cardBg,
+            borderTopWidth: 1,
+            borderTopColor: UI.colors.cardBorder,
+            paddingHorizontal: 16,
+            paddingTop: 8,
           }}
-          className="border-t border-gray-200 bg-white px-4 pt-2"
         >
-          <View className="flex-row gap-3">
+          <View style={{ flexDirection: "row", gap: 12 }}>
             <TouchableOpacity
               onPress={allSelected ? clearSelection : selectAll}
               activeOpacity={0.85}
-              className="flex-1 flex-row items-center justify-center rounded-2xl bg-white py-3"
               style={{
+                flex: 1,
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "center",
+                borderRadius: UI.radius.button,
+                backgroundColor: UI.colors.cardBg,
+                paddingVertical: 12,
                 borderWidth: 1,
-                borderColor: "#E5E7EB",
+                borderColor: UI.colors.cardBorder,
               }}
             >
               <Ionicons
                 name={allSelected ? "remove-circle-outline" : "checkbox-outline"}
                 size={18}
-                color="#111827"
+                color={UI.colors.textPrimary}
               />
-              <Text className="ml-2 font-medium text-gray-900">
+              <Text
+                style={{
+                  marginLeft: 8,
+                  fontSize: UI.type.body,
+                  fontWeight: "500",
+                  color: UI.colors.textPrimary,
+                }}
+              >
                 {allSelected ? "Clear Selection" : "Select All"}
               </Text>
             </TouchableOpacity>
@@ -267,27 +319,38 @@ export default function MyTripsScreen() {
               onPress={deleteSelected}
               disabled={ownedSelectedTripIds.length === 0 || deleting}
               activeOpacity={0.85}
-              className={`flex-1 flex-row items-center justify-center rounded-2xl py-3 ${
-                ownedSelectedTripIds.length === 0 || deleting
-                  ? "bg-gray-200"
-                  : "bg-red-50"
-              }`}
+              style={{
+                flex: 1,
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "center",
+                borderRadius: UI.radius.button,
+                paddingVertical: 12,
+                backgroundColor:
+                  ownedSelectedTripIds.length === 0 || deleting
+                    ? UI.colors.disabledBg
+                    : UI.colors.dangerSoft,
+              }}
             >
               <Ionicons
                 name="trash-outline"
                 size={18}
                 color={
                   ownedSelectedTripIds.length === 0 || deleting
-                    ? "#94A3B8"
-                    : "#DC2626"
+                    ? UI.colors.disabledText
+                    : UI.colors.danger
                 }
               />
               <Text
-                className={`ml-2 font-medium ${
-                  ownedSelectedTripIds.length === 0 || deleting
-                    ? "text-slate-400"
-                    : "text-red-600"
-                }`}
+                style={{
+                  marginLeft: 8,
+                  fontSize: UI.type.body,
+                  fontWeight: "500",
+                  color:
+                    ownedSelectedTripIds.length === 0 || deleting
+                      ? UI.colors.disabledText
+                      : UI.colors.danger,
+                }}
               >
                 {deleting ? "Deleting..." : "Delete"}
               </Text>

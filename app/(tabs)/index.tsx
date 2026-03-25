@@ -1,8 +1,10 @@
+import { SectionHeader } from "@/components/common/SectionHeader";
 import { JoinTripModal } from "@/components/home/JoinTripModal";
 import { TripActionsMenu } from "@/components/home/TripActionsMenu";
 import { TripPreviewCard } from "@/components/trips/TripPreviewCard";
 import { useTrips } from "@/context/TripsContext";
 import type { ItineraryModel } from "@/src/models";
+import { UI } from "@/src/theme/ui";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import { ActivityIndicator, ScrollView, Text, View } from "react-native";
@@ -27,20 +29,28 @@ export default function HomeScreen() {
 
   return (
     <ScrollView
-      className="flex-1 bg-gray-50"
+      className="flex-1"
+      style={{ backgroundColor: UI.colors.pageBg }}
       contentContainerStyle={{
-        paddingHorizontal: 20,
-        paddingTop: insets.top + 16,
+        paddingHorizontal: UI.spacing.pageX,
+        paddingTop: insets.top + UI.spacing.pageTop,
         paddingBottom: 32,
       }}
       showsVerticalScrollIndicator={false}
     >
-      <Text className="mb-1 text-3xl font-extrabold leading-[48px] text-zinc-900">
-        Your Trips
+      <Text
+        style={{
+          fontSize: UI.type.pageTitle,
+          fontWeight: "800",
+          color: UI.colors.textPrimary,
+          marginBottom: 24,
+        }}
+      >
+        Trips
       </Text>
 
       {loading ? (
-        <ActivityIndicator size="large" color="#6D28D9" style={{ marginTop: 40 }} />
+        <ActivityIndicator size="large" color={UI.colors.brand} style={{ marginTop: 40 }} />
       ) : (
         <>
           <TripActionsMenu
@@ -49,8 +59,8 @@ export default function HomeScreen() {
           />
 
           {currentTrip ? (
-            <View className="mt-4">
-              <Text className="mb-4 text-2xl font-bold text-zinc-900">Current Trip</Text>
+            <View style={{ marginTop: UI.spacing.sectionGap }}>
+              <SectionHeader title="Current Trip" />
               <TripPreviewCard
                 trip={currentTrip}
                 onPress={() => openTrip(currentTrip.id)}
@@ -59,8 +69,8 @@ export default function HomeScreen() {
           ) : null}
 
           {upcomingTrips.length > 0 ? (
-            <View className={currentTrip ? "mt-4" : "mt-4"}>
-              <Text className="mb-4 text-2xl font-bold text-zinc-900">Upcoming Trips</Text>
+            <View style={{ marginTop: UI.spacing.sectionGap }}>
+              <SectionHeader title="Upcoming Trips" />
               {upcomingTrips.map((trip: ItineraryModel) => (
                 <TripPreviewCard
                   key={trip.id}
@@ -72,8 +82,8 @@ export default function HomeScreen() {
           ) : null}
 
           {trips.length === 0 ? (
-            <View className="mt-16 items-center">
-              <Text className="text-base text-gray-400">
+            <View style={{ marginTop: 64, alignItems: "center" }}>
+              <Text style={{ fontSize: UI.type.body, color: UI.colors.textMuted }}>
                 No trips yet. Add one to get started!
               </Text>
             </View>

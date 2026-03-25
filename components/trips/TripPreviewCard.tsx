@@ -3,6 +3,7 @@ import {
   changeTripCoverPhoto,
   getTripPreviewImageUri,
 } from "@/src/services/trips";
+import { UI } from "@/src/theme/ui";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { useCallback, useEffect, useState } from "react";
@@ -23,12 +24,12 @@ function StarRating({
   onChange?: (value: number) => void;
 }) {
   return (
-    <View className="flex-row">
+    <View style={{ flexDirection: "row" }}>
       {[1, 2, 3, 4, 5].map((n) => (
         <Pressable
           key={n}
           onPress={() => onChange?.(n)}
-          className="mr-1"
+          style={{ marginRight: 4 }}
           disabled={!onChange}
         >
           <Ionicons
@@ -121,15 +122,14 @@ export function TripPreviewCard({
   return (
     <Pressable
       onPress={selecting ? onToggleSelect : onPress}
-      className={`mb-4 overflow-hidden rounded-2xl bg-white ${
-        selecting && selected ? "border-2 border-red-400" : "border border-gray-200"
-      }`}
       style={{
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.06,
-        shadowRadius: 4,
-        elevation: 2,
+        borderColor: selecting && selected ? "#F87171" : UI.colors.cardBorder,
+        borderWidth: selecting && selected ? 2 : 1,
+        borderRadius: UI.radius.card,
+        overflow: "hidden",
+        backgroundColor: UI.colors.cardBg,
+        marginBottom: 16,
+        ...UI.shadow.card,
       }}
     >
       <ImageBackground
@@ -139,43 +139,68 @@ export function TripPreviewCard({
       >
         <View
           style={{
-            backgroundColor: coverUrl ? "rgba(0,0,0,0.38)" : "#FFFFFF",
-            padding: 16,
+            backgroundColor: coverUrl ? UI.colors.overlayDark : UI.colors.cardBg,
+            padding: UI.spacing.cardPadding,
           }}
         >
-          <View className="mb-3 flex-row items-start justify-between">
-            <View className="flex-1 pr-3">
+          <View
+            style={{
+              marginBottom: 12,
+              flexDirection: "row",
+              alignItems: "flex-start",
+              justifyContent: "space-between",
+            }}
+          >
+            <View style={{ flex: 1, paddingRight: 12 }}>
               <View
-                className="self-start rounded-full px-3 py-1"
                 style={{
-                  backgroundColor: coverUrl ? "rgba(255,255,255,0.18)" : "#EEF2FF",
+                  alignSelf: "flex-start",
+                  borderRadius: UI.radius.pill,
+                  paddingHorizontal: 12,
+                  paddingVertical: 6,
+                  backgroundColor: coverUrl ? "rgba(255,255,255,0.18)" : UI.colors.brandSoft,
                 }}
               >
                 <Text
-                  className="text-xs font-bold uppercase tracking-widest"
-                  style={{ color: coverUrl ? "#FFFFFF" : "#4F46E5" }}
+                  style={{
+                    fontSize: UI.type.overline,
+                    fontWeight: "700",
+                    textTransform: "uppercase",
+                    letterSpacing: 1.2,
+                    color: coverUrl ? "#FFFFFF" : UI.colors.brand,
+                  }}
                 >
                   {statusLabel(trip.status)}
                 </Text>
               </View>
 
               <Text
-                className="mt-3 text-xl font-semibold"
-                style={{ color: coverUrl ? "#FFFFFF" : "#111827" }}
+                style={{
+                  marginTop: 12,
+                  fontSize: UI.type.cardTitle,
+                  fontWeight: "600",
+                  color: coverUrl ? "#FFFFFF" : UI.colors.textPrimary,
+                }}
               >
                 {trip.title}
               </Text>
 
               <Text
-                className="mt-1 text-sm"
-                style={{ color: coverUrl ? "#F1F5F9" : "#64748B" }}
+                style={{
+                  marginTop: 4,
+                  fontSize: UI.type.body,
+                  color: coverUrl ? "#F1F5F9" : UI.colors.textSecondary,
+                }}
               >
                 {trip.cityOrArea} • {trip.startDate} to {trip.endDate}
               </Text>
 
               <Text
-                className="mt-1 text-sm"
-                style={{ color: coverUrl ? "#F1F5F9" : "#64748B" }}
+                style={{
+                  marginTop: 4,
+                  fontSize: UI.type.body,
+                  color: coverUrl ? "#F1F5F9" : UI.colors.textSecondary,
+                }}
               >
                 {trip.stopCount ?? trip.stops?.length ?? 0} stops
               </Text>
@@ -184,10 +209,14 @@ export function TripPreviewCard({
             <TouchableOpacity
               onPress={handleChangePhoto}
               activeOpacity={0.85}
-              className="rounded-full px-3 py-2"
-              style={{ backgroundColor: "rgba(255,255,255,0.82)" }}
+              style={{
+                backgroundColor: UI.colors.overlayLight,
+                borderRadius: UI.radius.pill,
+                paddingHorizontal: 12,
+                paddingVertical: 8,
+              }}
             >
-              <Text className="text-sm font-medium text-indigo-600">
+              <Text style={{ fontSize: UI.type.body, fontWeight: "500", color: UI.colors.brand }}>
                 {changingPhoto ? "Updating..." : "Change Photo"}
               </Text>
             </TouchableOpacity>
@@ -195,10 +224,19 @@ export function TripPreviewCard({
 
           {shouldShowRatingFooter ? (
             <>
-              <View className="flex-row items-center justify-between">
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                }}
+              >
                 <Text
-                  className="text-sm font-medium"
-                  style={{ color: coverUrl ? "#FFFFFF" : "#111827" }}
+                  style={{
+                    fontSize: UI.type.body,
+                    fontWeight: "500",
+                    color: coverUrl ? "#FFFFFF" : UI.colors.textPrimary,
+                  }}
                 >
                   Your rating
                 </Text>
@@ -207,22 +245,23 @@ export function TripPreviewCard({
                   <TouchableOpacity
                     onPress={onShareTrip}
                     activeOpacity={0.85}
-                    className="rounded-full bg-white/80 p-2"
+                    style={{
+                      backgroundColor: "rgba(255,255,255,0.80)",
+                      borderRadius: UI.radius.pill,
+                      padding: 8,
+                    }}
                   >
                     <Ionicons
                       name="share-social-outline"
                       size={18}
-                      color="#4F46E5"
+                      color={UI.colors.brand}
                     />
                   </TouchableOpacity>
                 ) : null}
               </View>
 
-              <View className="mt-2">
-                <StarRating
-                  value={rating}
-                  onChange={onChangeRating}
-                />
+              <View style={{ marginTop: 8 }}>
+                <StarRating value={rating} onChange={onChangeRating} />
               </View>
             </>
           ) : null}
