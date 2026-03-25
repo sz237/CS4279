@@ -9,25 +9,25 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import DraggableFlatList, {
   RenderItemParams,
   ScaleDecorator,
 } from "react-native-draggable-flatlist";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { CollapsedTripHeader } from "@/components/addTrip/CollapsedTripHeader";
+import { PlaceListCard } from "@/components/addTrip/PlaceListCard";
+import { PlanningOverlay } from "@/components/addTrip/PlanningOverlay";
+import { TripForm } from "@/components/addTrip/TripForm";
 import ActivityCard from "@/components/itinerary/ActivityCard";
 import { CommuteConnector } from "@/components/itinerary/CommuteConnector";
 import DayTabs from "@/components/itinerary/DayTabs";
-import { CollapsedTripHeader } from "@/components/addTrip/CollapsedTripHeader";
-import { TripForm } from "@/components/addTrip/TripForm";
-import { PlaceListCard } from "@/components/addTrip/PlaceListCard";
-import { PlanningOverlay } from "@/components/addTrip/PlanningOverlay";
 import { TripDatePicker } from "@/components/TripDatePicker";
+import { useAddTripContext } from "@/context/AddTripContext";
+import type { TripStop } from "@/lib/trips";
 import { openStopInGoogleMaps } from "@/lib/trips";
 import { estimateTravelMinutes } from "@/services/routeService";
 import type { AIActivityStop } from "@/services/types";
-import type { TripStop } from "@/lib/trips";
-import { useAddTripContext } from "@/context/AddTripContext";
 import { saveAiItinerary } from "@/src/services/trips";
 
 type FlatItem =
@@ -318,12 +318,12 @@ export default function AddTripScreen() {
 
       ) : (
         /* ── Initial Form View ──────────────────────────────────────────── */
-        <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 48 }} showsVerticalScrollIndicator={false}>
+        <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 28 }} showsVerticalScrollIndicator={false}>
           <View style={{ paddingTop: insets.top + 16 }}>
             <TripForm {...tripFormProps} showTitle />
           </View>
 
-          <View className="items-center pt-[72px] px-8">
+          <View className="items-center pt-[28px] px-8">
             <Text className="text-[36px] font-extrabold text-zinc-900 text-center leading-[44px]">
               Your Journey{"\n"}Awaits
             </Text>

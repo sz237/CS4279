@@ -1,8 +1,10 @@
 import { MemberChip } from "@/components/itinerary/MemberChip";
-import { useItinerarySheet } from "@/lib/ItinerarySheetContext";
 import { useTrips } from "@/context/TripsContext";
+import { useItinerarySheet } from "@/lib/ItinerarySheetContext";
 import { updateItinerary } from "@/src/services/trips";
+import { UI } from "@/src/theme/ui";
 import { Ionicons } from "@expo/vector-icons";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { Pressable, ScrollView, Share, Text, TextInput, View } from "react-native";
 
@@ -17,10 +19,15 @@ function formatDateRange(start: string, end: string): string {
 }
 
 export default function OverviewScreen() {
+  const router = useRouter();
+  const params = useLocalSearchParams<{ from?: string }>();
+
   const { reportStickyHeaderHeight, setMapDay, openEditModal } = useItinerarySheet();
 
-  // Reset map to show all stops when overview is active
-  useEffect(() => { setMapDay(null); }, []);
+  useEffect(() => {
+    setMapDay(null);
+  }, [setMapDay]);
+
   const { trips, selectedTripId } = useTrips();
   const trip = trips.find((t) => t.id === selectedTripId) ?? null;
 
@@ -28,17 +35,31 @@ export default function OverviewScreen() {
   const [notes, setNotes] = useState(trip?.notes ?? "");
   const [notesDraft, setNotesDraft] = useState(trip?.notes ?? "");
   const [notesSaving, setNotesSaving] = useState(false);
+
   const members = trip?.memberUsernames ?? [];
   const dateRange = trip ? formatDateRange(trip.startDate, trip.endDate) : "";
   const inviteCode = trip?.inviteCode ?? null;
 
-  // Sync notes if trip changes (e.g. real-time update from another member)
   useEffect(() => {
     if (!notesEditMode) {
       setNotes(trip?.notes ?? "");
       setNotesDraft(trip?.notes ?? "");
     }
-  }, [trip?.notes]);
+  }, [trip?.notes, notesEditMode]);
+
+  function handleBack() {
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
+
+    if (params.from === "my-trips") {
+      router.push("/(tabs)/profile/my-trips" as never);
+      return;
+    }
+
+    router.push("/(tabs)" as never);
+  }
 
   function handleNotesEdit() {
     setNotesDraft(notes);
@@ -68,38 +89,79 @@ export default function OverviewScreen() {
   }
 
   return (
-    <View style={{ flex: 1, backgroundColor: "#F9FAFB" }}>
-      {/* ── Sticky header: title + dates ── */}
+    <View style={{ flex: 1, backgroundColor: UI.colors.pageBg }}>
       <View
-        style={{ backgroundColor: "#F9FAFB", paddingHorizontal: 24, paddingTop: 24, paddingBottom: 20 }}
+        style={{
+          backgroundColor: UI.colors.pageBg,
+          paddingHorizontal: UI.spacing.pageX,
+          paddingTop: UI.spacing.pageTop + 8,
+          paddingBottom: 20,
+        }}
         onLayout={(e) => reportStickyHeaderHeight(e.nativeEvent.layout.height)}
       >
-        <View className="flex-row items-start justify-between" style={{ gap: 4 }}>
-          <View className="flex-1" style={{ gap: 4 }}>
+        <View style={{ flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
+          <Pressable
+            onPress={handleBack}
+            style={{
+              width: 40,
+              height: 40,
+              borderRadius: UI.radius.pill,
+              backgroundColor: UI.colors.cardBg,
+              alignItems: "center",
+              justifyContent: "center",
+              marginTop: 4,
+              borderWidth: 1,
+              borderColor: UI.colors.cardBorder,
+            }}
+            accessibilityLabel="Go back"
+          >
+            <Ionicons name="chevron-back" size={20} color="#71717A" />
+          </Pressable>
+
+          <View style={{ flex: 1, gap: 4 }}>
             <Text
               style={{
-                fontSize: 10,
+                fontSize: UI.type.overline,
                 fontWeight: "700",
-                color: "#6D28D9",
+                color: UI.colors.brand,
                 textTransform: "uppercase",
                 letterSpacing: 1.2,
               }}
             >
               Trip Overview
             </Text>
-            <Text style={{ fontSize: 30, fontWeight: "800", color: "#18181B" }}>
+
+            <Text
+              style={{
+                fontSize: UI.type.pageTitle,
+                fontWeight: "800",
+                color: UI.colors.textPrimary,
+              }}
+            >
               {trip?.title ?? "Your Trip"}
             </Text>
-            <View className="flex-row items-center gap-1.5 mt-1">
+
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 4 }}>
               <Ionicons name="calendar-outline" size={15} color="#71717A" />
-              <Text className="text-zinc-500 text-sm">{dateRange}</Text>
+              <Text style={{ fontSize: UI.type.body, color: UI.colors.textSecondary }}>
+                {dateRange}
+              </Text>
             </View>
           </View>
 
-          {/* Subtle edit button */}
           <Pressable
             onPress={openEditModal}
-            className="w-8 h-8 rounded-full bg-gray-100 items-center justify-center mt-1"
+            style={{
+              width: 36,
+              height: 36,
+              borderRadius: UI.radius.pill,
+              backgroundColor: UI.colors.cardBg,
+              alignItems: "center",
+              justifyContent: "center",
+              marginTop: 4,
+              borderWidth: 1,
+              borderColor: UI.colors.cardBorder,
+            }}
             accessibilityLabel="Edit trip"
           >
             <Ionicons name="pencil-outline" size={15} color="#71717A" />
@@ -107,16 +169,14 @@ export default function OverviewScreen() {
         </View>
       </View>
 
-      {/* ── Scrollable content below ── */}
       <ScrollView
         contentContainerStyle={{
-          paddingHorizontal: 24,
+          paddingHorizontal: UI.spacing.pageX,
           paddingTop: 8,
           paddingBottom: 32,
         }}
         showsVerticalScrollIndicator={false}
       >
-        {/* Group Members */}
         <View>
           <View
             style={{
@@ -126,15 +186,16 @@ export default function OverviewScreen() {
               marginBottom: 16,
             }}
           >
-            <Text style={{ fontSize: 18, fontWeight: "700", color: "#18181B" }}>
+            <Text style={{ fontSize: 18, fontWeight: "700", color: UI.colors.textPrimary }}>
               Group Members
             </Text>
+
             <Pressable
               style={{ flexDirection: "row", alignItems: "center", gap: 4 }}
               accessibilityLabel="Invite group members"
             >
-              <Ionicons name="add" size={14} color="#6D28D9" />
-              <Text style={{ fontSize: 12, fontWeight: "700", color: "#6D28D9" }}>
+              <Ionicons name="add" size={14} color={UI.colors.brand} />
+              <Text style={{ fontSize: UI.type.caption, fontWeight: "700", color: UI.colors.brand }}>
                 Manage
               </Text>
             </Pressable>
@@ -147,33 +208,68 @@ export default function OverviewScreen() {
           </View>
         </View>
 
-        {/* Invite Code */}
         {inviteCode && (
-          <View className="mt-7">
-            <Text className="text-lg font-bold text-zinc-900 mb-3">Invite Code</Text>
-            <View className="flex-row items-center justify-between bg-gray-100 rounded-xl px-4 py-3">
-              <Text className="text-base font-semibold text-zinc-900 tracking-widest">
+          <View style={{ marginTop: UI.spacing.sectionGap }}>
+            <Text
+              style={{
+                fontSize: 18,
+                fontWeight: "700",
+                color: UI.colors.textPrimary,
+                marginBottom: 12,
+              }}
+            >
+              Invite Code
+            </Text>
+
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "space-between",
+                backgroundColor: UI.colors.cardBg,
+                borderColor: UI.colors.cardBorder,
+                borderWidth: 1,
+                borderRadius: UI.radius.card,
+                padding: UI.spacing.cardPadding,
+                ...UI.shadow.card,
+              }}
+            >
+              <Text
+                style={{
+                  fontSize: 16,
+                  fontWeight: "600",
+                  color: UI.colors.textPrimary,
+                  letterSpacing: 1.5,
+                }}
+              >
                 {inviteCode}
               </Text>
+
               <Pressable
                 onPress={shareCode}
-                className="flex-row items-center gap-1.5"
+                style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
               >
-                <Ionicons name="copy-outline" size={16} color="#6D28D9" />
-                <Text className="text-violet-700 text-sm font-bold">Copy</Text>
+                <Ionicons name="copy-outline" size={16} color={UI.colors.brand} />
+                <Text style={{ fontSize: UI.type.body, fontWeight: "700", color: UI.colors.brand }}>
+                  Copy
+                </Text>
               </Pressable>
             </View>
           </View>
         )}
 
-        {/* Notes */}
-        <View className="mt-7">
-          <View className="flex-row items-center justify-between mb-3">
-            <Text className="text-lg font-bold text-zinc-900">Notes</Text>
+        <View style={{ marginTop: UI.spacing.sectionGap }}>
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+            <Text style={{ fontSize: 18, fontWeight: "700", color: UI.colors.textPrimary }}>
+              Notes
+            </Text>
+
             {!notesEditMode && (
-              <Pressable onPress={handleNotesEdit} className="flex-row items-center gap-1">
-                <Ionicons name="pencil-outline" size={14} color="#6D28D9" />
-                <Text className="text-violet-700 text-xs font-bold">Edit</Text>
+              <Pressable onPress={handleNotesEdit} style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+                <Ionicons name="pencil-outline" size={14} color={UI.colors.brand} />
+                <Text style={{ fontSize: UI.type.caption, fontWeight: "700", color: UI.colors.brand }}>
+                  Edit
+                </Text>
               </Pressable>
             )}
           </View>
@@ -187,30 +283,75 @@ export default function OverviewScreen() {
                 placeholderTextColor="#A1A1AA"
                 multiline
                 autoFocus
-                className="bg-gray-100 rounded-xl px-4 py-3 text-zinc-900 text-sm mb-3"
-                style={{ minHeight: 100, textAlignVertical: "top" }}
+                style={{
+                  minHeight: 100,
+                  textAlignVertical: "top",
+                  backgroundColor: UI.colors.cardBg,
+                  borderColor: UI.colors.cardBorder,
+                  borderWidth: 1,
+                  borderRadius: UI.radius.card,
+                  padding: UI.spacing.cardPadding,
+                  color: UI.colors.textPrimary,
+                  fontSize: UI.type.body,
+                  marginBottom: 12,
+                  ...UI.shadow.card,
+                }}
               />
-              <View className="flex-row gap-2">
+
+              <View style={{ flexDirection: "row", gap: 8 }}>
                 <Pressable
                   onPress={handleNotesCancel}
-                  className="flex-1 border border-gray-300 rounded-xl py-3 items-center"
+                  style={{
+                    flex: 1,
+                    borderWidth: 1,
+                    borderColor: UI.colors.cardBorder,
+                    borderRadius: UI.radius.button,
+                    paddingVertical: 12,
+                    alignItems: "center",
+                    backgroundColor: UI.colors.cardBg,
+                  }}
                 >
-                  <Text className="text-zinc-600 text-sm font-semibold">Cancel</Text>
+                  <Text style={{ color: UI.colors.textSecondary, fontSize: UI.type.body, fontWeight: "600" }}>
+                    Cancel
+                  </Text>
                 </Pressable>
+
                 <Pressable
                   onPress={handleNotesSave}
                   disabled={notesSaving}
-                  className="flex-1 bg-violet-600 rounded-xl py-3 items-center"
+                  style={{
+                    flex: 1,
+                    borderRadius: UI.radius.button,
+                    paddingVertical: 12,
+                    alignItems: "center",
+                    backgroundColor: UI.colors.brand,
+                  }}
                 >
-                  <Text className="text-white text-sm font-semibold">
+                  <Text style={{ color: "#FFFFFF", fontSize: UI.type.body, fontWeight: "600" }}>
                     {notesSaving ? "Saving…" : "Save"}
                   </Text>
                 </Pressable>
               </View>
             </>
           ) : (
-            <Pressable onPress={handleNotesEdit} className="bg-gray-100 rounded-xl px-4 py-3" style={{ minHeight: 80 }}>
-              <Text className={`text-sm ${notes ? "text-zinc-900" : "text-zinc-400"}`}>
+            <Pressable
+              onPress={handleNotesEdit}
+              style={{
+                minHeight: 80,
+                backgroundColor: UI.colors.cardBg,
+                borderColor: UI.colors.cardBorder,
+                borderWidth: 1,
+                borderRadius: UI.radius.card,
+                padding: UI.spacing.cardPadding,
+                ...UI.shadow.card,
+              }}
+            >
+              <Text
+                style={{
+                  fontSize: UI.type.body,
+                  color: notes ? UI.colors.textPrimary : "#A1A1AA",
+                }}
+              >
                 {notes || "Add notes for the group…"}
               </Text>
             </Pressable>

@@ -21,7 +21,7 @@ export interface UserSettings {
  * Firestore path: usernames/{username}
  *
  * Lookup collection so you can enforce unique usernames and resolve
- * a username → uid in a single read.
+ * a username -> uid in a single read.
  */
 export interface UsernameRecord {
   uid: string;

@@ -1,47 +1,46 @@
+import { SectionHeader } from "@/components/common/SectionHeader";
 import { auth } from "@/src/config/firebase";
 import {
-    ProfileUser,
-    getCurrentUserProfile,
-    getFollowers,
-    getFollowersForUI,
-    getFollowing,
-    getFollowingForUI,
+  ProfileUser,
+  getCurrentUserProfile,
+  getFollowers,
+  getFollowersForUI,
+  getFollowing,
+  getFollowingForUI,
 } from "@/src/services/profile";
+import { UI } from "@/src/theme/ui";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "expo-router";
 import { signOut } from "firebase/auth";
 import { useCallback, useMemo, useState } from "react";
 import {
-    Alert,
-    Image,
-    Pressable,
-    ScrollView,
-    Text,
-    View,
+  Alert,
+  Image,
+  Pressable,
+  ScrollView,
+  Text,
+  View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-function SectionHeader({ title }: { title: string }) {
-  return <Text className="mb-2 text-base font-bold text-gray-900">{title}</Text>;
-}
-
 function Card({
   children,
-  className = "",
+  style,
 }: {
   children: React.ReactNode;
-  className?: string;
+  style?: object;
 }) {
   return (
     <View
-      className={`rounded-2xl border border-gray-200 bg-white p-4 ${className}`}
       style={{
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.06,
-        shadowRadius: 4,
-        elevation: 2,
+        backgroundColor: UI.colors.cardBg,
+        borderColor: UI.colors.cardBorder,
+        borderWidth: 1,
+        borderRadius: UI.radius.card,
+        padding: UI.spacing.cardPadding,
+        ...UI.shadow.card,
+        ...(style ?? {}),
       }}
     >
       {children}
@@ -61,13 +60,36 @@ function NavRow({
   onPress?: () => void;
 }) {
   return (
-    <Pressable className="flex-row items-center py-1" onPress={onPress}>
-      <Ionicons name={icon} size={22} color="#94A3B8" />
-      <View className="ml-3 flex-1">
-        <Text className="text-lg font-medium text-gray-900">{title}</Text>
-        <Text className="text-sm text-slate-500">{subtitle}</Text>
+    <Pressable
+      onPress={onPress}
+      style={{
+        flexDirection: "row",
+        alignItems: "center",
+        paddingVertical: 16,
+      }}
+    >
+      <Ionicons name={icon} size={22} color={UI.colors.textMuted} />
+      <View style={{ marginLeft: 12, flex: 1 }}>
+        <Text
+          style={{
+            fontSize: 18,
+            fontWeight: "500",
+            color: UI.colors.textPrimary,
+          }}
+        >
+          {title}
+        </Text>
+        <Text
+          style={{
+            marginTop: 2,
+            fontSize: UI.type.body,
+            color: UI.colors.textSecondary,
+          }}
+        >
+          {subtitle}
+        </Text>
       </View>
-      <Ionicons name="chevron-forward" size={22} color="#94A3B8" />
+      <Ionicons name="chevron-forward" size={22} color={UI.colors.textMuted} />
     </Pressable>
   );
 }
@@ -101,10 +123,18 @@ function Avatar({
 
   return (
     <View
-      className="items-center justify-center rounded-full bg-indigo-100"
-      style={{ width: size, height: size }}
+      style={{
+        width: size,
+        height: size,
+        borderRadius: size / 2,
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: "#E0E7FF",
+      }}
     >
-      <Text className="text-2xl font-semibold text-indigo-600">{initials}</Text>
+      <Text style={{ fontSize: 24, fontWeight: "600", color: UI.colors.brand }}>
+        {initials}
+      </Text>
     </View>
   );
 }
@@ -121,10 +151,34 @@ function StatPill({
   return (
     <Pressable
       onPress={onPress}
-      className="flex-1 rounded-2xl border border-gray-200 bg-white p-4"
+      style={{
+        flex: 1,
+        backgroundColor: UI.colors.cardBg,
+        borderColor: UI.colors.cardBorder,
+        borderWidth: 1,
+        borderRadius: UI.radius.card,
+        padding: UI.spacing.cardPadding,
+        ...UI.shadow.card,
+      }}
     >
-      <Text className="text-2xl font-bold text-gray-900">{value}</Text>
-      <Text className="mt-1 text-sm text-slate-500">{label}</Text>
+      <Text
+        style={{
+          fontSize: 24,
+          fontWeight: "700",
+          color: UI.colors.textPrimary,
+        }}
+      >
+        {value}
+      </Text>
+      <Text
+        style={{
+          marginTop: 4,
+          fontSize: UI.type.body,
+          color: UI.colors.textSecondary,
+        }}
+      >
+        {label}
+      </Text>
     </Pressable>
   );
 }
@@ -186,33 +240,78 @@ export default function ProfileScreen() {
   const followersForUI = useMemo(() => getFollowersForUI(followers), [followers]);
 
   return (
-    <View className="flex-1 bg-gray-50">
+    <View className="flex-1" style={{ backgroundColor: UI.colors.pageBg }}>
       <ScrollView
         className="flex-1"
+        style={{ backgroundColor: UI.colors.pageBg }}
         contentContainerStyle={{
-          paddingHorizontal: 20,
-          paddingTop: insets.top + 16,
-          paddingBottom: 24,
+          paddingHorizontal: 16,
+          paddingTop: insets.top + 12,
+          paddingBottom: UI.spacing.pageBottom,
         }}
         showsVerticalScrollIndicator={false}
       >
-        <Text className="mb-4 text-3xl font-bold text-gray-900">Profile</Text>
+        <Text
+          style={{
+            fontSize: UI.type.pageTitle,
+            fontWeight: "800",
+            color: UI.colors.textPrimary,
+            marginBottom: 16,
+          }}
+        >
+          Profile
+        </Text>
 
-        <Card className="mb-4">
-          <View className="flex-row items-center">
+        <Card style={{ marginBottom: 12 }}>
+          <View style={{ flexDirection: "row", alignItems: "center" }}>
             <Avatar name={displayName} photoURL={photoURL} size={96} />
-            <View className="ml-4 flex-1">
-              <Text className="text-3xl font-semibold text-gray-900">
+            <View style={{ marginLeft: 16, flex: 1 }}>
+              <Text
+                style={{
+                  fontSize: 30,
+                  fontWeight: "600",
+                  color: UI.colors.textPrimary,
+                }}
+              >
                 {displayName}
               </Text>
-              <Text className="mt-1 text-base text-slate-500">{username}</Text>
-              <Text className="mt-1 text-base text-slate-500">{email}</Text>
+              <Text
+                style={{
+                  marginTop: 4,
+                  fontSize: UI.type.body,
+                  color: UI.colors.textSecondary,
+                }}
+              >
+                {username}
+              </Text>
+              <Text
+                style={{
+                  marginTop: 4,
+                  fontSize: UI.type.body,
+                  color: UI.colors.textSecondary,
+                }}
+              >
+                {email}
+              </Text>
 
               <Pressable
-                className="mt-3 self-start rounded-full bg-indigo-50 px-4 py-2"
                 onPress={() => router.push("/(tabs)/profile/edit")}
+                style={{
+                  marginTop: 12,
+                  alignSelf: "flex-start",
+                  borderRadius: UI.radius.pill,
+                  backgroundColor: UI.colors.brandSoft,
+                  paddingHorizontal: 16,
+                  paddingVertical: 8,
+                }}
               >
-                <Text className="text-base font-medium text-indigo-600">
+                <Text
+                  style={{
+                    fontSize: UI.type.body,
+                    fontWeight: "500",
+                    color: UI.colors.brand,
+                  }}
+                >
                   Edit Profile
                 </Text>
               </Pressable>
@@ -220,7 +319,7 @@ export default function ProfileScreen() {
           </View>
         </Card>
 
-        <View className="mb-4 flex-row gap-3">
+        <View style={{ marginBottom: 16, flexDirection: "row", gap: 8 }}>
           <StatPill
             label="Following"
             value={followingForUI.length}
@@ -243,24 +342,24 @@ export default function ProfileScreen() {
           />
         </View>
 
-        <View className="mb-4">
+        <View style={{ marginBottom: 16 }}>
           <SectionHeader title="Trips" />
-          <Card className="p-0">
-            <View className="px-4">
+          <Card style={{ padding: 0 }}>
+            <View style={{ paddingHorizontal: 16 }}>
               <NavRow
                 icon="briefcase-outline"
-                title="Past Trips"
-                subtitle="View, rate, share, and delete itineraries you created"
-                onPress={() => router.push("/(tabs)/profile/past-trips")}
+                title="My Trips"
+                subtitle="View, rate, share, and delete itineraries"
+                onPress={() => router.push("/(tabs)/profile/my-trips")}
               />
             </View>
           </Card>
         </View>
 
-        <View className="mb-4">
+        <View style={{ marginBottom: 16 }}>
           <SectionHeader title="Settings" />
-          <Card className="p-0">
-            <View className="px-4">
+          <Card style={{ padding: 0 }}>
+            <View style={{ paddingHorizontal: 16 }}>
               <NavRow
                 icon="notifications-outline"
                 title="Push Notifications"
@@ -268,8 +367,10 @@ export default function ProfileScreen() {
                 onPress={() => router.push("/(tabs)/profile/notifications")}
               />
             </View>
-            <View className="h-px bg-gray-100" />
-            <View className="px-4">
+
+            <View style={{ height: 1, backgroundColor: "#F3F4F6" }} />
+
+            <View style={{ paddingHorizontal: 16 }}>
               <NavRow
                 icon="shield-checkmark-outline"
                 title="Privacy & Security"
@@ -277,8 +378,10 @@ export default function ProfileScreen() {
                 onPress={() => router.push("/(tabs)/profile/privacy")}
               />
             </View>
-            <View className="h-px bg-gray-100" />
-            <View className="px-4">
+
+            <View style={{ height: 1, backgroundColor: "#F3F4F6" }} />
+
+            <View style={{ paddingHorizontal: 16 }}>
               <NavRow
                 icon="help-circle-outline"
                 title="Help & Support"
@@ -289,24 +392,39 @@ export default function ProfileScreen() {
           </Card>
         </View>
 
+        <View style={{ marginBottom: 16 }}>
+          <SectionHeader title="Account" />
+          <Card style={{ padding: 0 }}>
+            <Pressable
+              onPress={handleSignOut}
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "center",
+                paddingVertical: 16,
+              }}
+            >
+              <Ionicons name="log-out-outline" size={22} color={UI.colors.danger} />
+              <Text
+                style={{
+                  marginLeft: 8,
+                  fontSize: 18,
+                  fontWeight: "500",
+                  color: UI.colors.danger,
+                }}
+              >
+                Log Out
+              </Text>
+            </Pressable>
+          </Card>
+        </View>
+
         {loading ? (
-          <Text className="text-sm text-slate-400">Loading profile…</Text>
+          <Text style={{ fontSize: UI.type.body, color: UI.colors.textMuted }}>
+            Loading profile…
+          </Text>
         ) : null}
       </ScrollView>
-
-      <View className="border-t border-gray-200 bg-gray-50 px-3 pb-3 pt-2">
-        <Card className="p-0">
-          <Pressable
-            onPress={handleSignOut}
-            className="flex-row items-center justify-center py-1"
-          >
-            <Ionicons name="log-out-outline" size={22} color="#DC2626" />
-            <Text className="ml-2 text-lg font-medium text-red-600">
-              Log Out
-            </Text>
-          </Pressable>
-        </Card>
-      </View>
     </View>
   );
 }

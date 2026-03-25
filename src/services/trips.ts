@@ -1,6 +1,13 @@
 import type { AIDayResult } from "@/services/types";
 import { auth, db } from "@/src/config/firebase";
+import {
+  getBestPhotoUrl,
+  searchText,
+  type PlaceV1,
+} from "@/src/googlePlaces";
 import type { ItineraryModel, ItineraryStatus, StopModel } from "@/src/models";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as ImagePicker from "expo-image-picker";
 import {
   arrayUnion,
   collection,
@@ -16,6 +23,43 @@ import {
   where,
   writeBatch,
 } from "firebase/firestore";
+
+const LOCAL_TRIP_COVER_KEY = "nomad_local_trip_covers_v1";
+
+// ─── Local cover override helpers ─────────────────────────────────────────────
+
+async function getLocalTripCoverMap(): Promise<Record<string, string>> {
+  const raw = await AsyncStorage.getItem(LOCAL_TRIP_COVER_KEY);
+  if (!raw) return {};
+  try {
+    return JSON.parse(raw) as Record<string, string>;
+  } catch {
+    return {};
+  }
+}
+
+async function setLocalTripCoverUri(tripId: string, uri: string) {
+  const map = await getLocalTripCoverMap();
+  map[tripId] = uri;
+  await AsyncStorage.setItem(LOCAL_TRIP_COVER_KEY, JSON.stringify(map));
+}
+
+export async function getLocalTripCoverUri(tripId: string): Promise<string | null> {
+  const map = await getLocalTripCoverMap();
+  return map[tripId] ?? null;
+}
+
+export async function getTripPreviewImageUri(
+  trip: Pick<ItineraryModel, "id" | "cityOrArea" | "coverImageUrl">
+): Promise<string | null> {
+  const localUri = await getLocalTripCoverUri(trip.id);
+  if (localUri) return localUri;
+
+  if (trip.coverImageUrl) return trip.coverImageUrl;
+
+  const backfilled = await ensureTripCoverImage(trip);
+  return backfilled;
+}
 
 // ─── Itineraries ──────────────────────────────────────────────────────────────
 
@@ -53,6 +97,87 @@ export async function getUserItineraries(): Promise<ItineraryModel[]> {
   );
   const snap = await getDocs(q);
   return snap.docs.map((d) => d.data() as ItineraryModel);
+}
+
+async function fetchCityCoverImageUrl(
+  cityOrArea: string,
+  excludeUrl?: string | null
+): Promise<string | null> {
+  const apiKey = process.env.EXPO_PUBLIC_googlePlacesApiKey as string | undefined;
+  if (!apiKey || !cityOrArea.trim()) return null;
+
+  try {
+    const resp = await searchText({
+      apiKey,
+      textQuery: cityOrArea,
+      maxResultCount: 10,
+    });
+
+    const candidates = (resp.places ?? [])
+      .filter((p: PlaceV1) => p.photos && p.photos.length > 0)
+      .map((p) =>
+        getBestPhotoUrl({
+          apiKey,
+          place: p,
+          maxWidthPx: 1200,
+        })
+      )
+      .filter((url): url is string => !!url)
+      .filter((url) => url !== excludeUrl);
+
+    if (candidates.length === 0) return null;
+
+    const chosen =
+      candidates[Math.floor(Math.random() * candidates.length)] ?? candidates[0];
+
+    return chosen;
+  } catch {
+    return null;
+  }
+}
+
+export async function ensureTripCoverImage(
+  trip: Pick<ItineraryModel, "id" | "cityOrArea" | "coverImageUrl">
+): Promise<string | null> {
+  if (trip.coverImageUrl) return trip.coverImageUrl;
+
+  const url = await fetchCityCoverImageUrl(trip.cityOrArea);
+  if (!url) return null;
+
+  await updateItinerary(trip.id, { coverImageUrl: url });
+  return url;
+}
+
+/**
+ * Change the cover image by selecting from the device photo library.
+ * This stores a local URI override in AsyncStorage for now.
+ */
+export async function changeTripCoverPhoto(
+  trip: Pick<ItineraryModel, "id" | "cityOrArea" | "coverImageUrl">
+): Promise<string | null> {
+  const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+  if (!permission.granted) {
+    throw new Error("Photo library permission is required to choose a cover image.");
+  }
+
+  const result = await ImagePicker.launchImageLibraryAsync({
+    mediaTypes: ImagePicker.MediaTypeOptions.Images,
+    allowsEditing: true,
+    quality: 0.9,
+  });
+
+  if (result.canceled || !result.assets?.length) {
+    return await getTripPreviewImageUri(trip);
+  }
+
+  const pickedUri = result.assets[0]?.uri;
+  if (!pickedUri) {
+    return await getTripPreviewImageUri(trip);
+  }
+
+  await setLocalTripCoverUri(trip.id, pickedUri);
+  return pickedUri;
 }
 
 // ─── Joining ──────────────────────────────────────────────────────────────────
@@ -248,6 +373,7 @@ export async function saveAiItinerary(
 
   const stopIds = allActivities.map((_, i) => `${itineraryId}_stop_${i}`);
   const inviteCode = await generateUniqueInviteCode(params.cityOrArea);
+  const coverImageUrl = await fetchCityCoverImageUrl(params.cityOrArea);
 
   const itinerary: ItineraryModel = {
     id: itineraryId,
@@ -259,6 +385,7 @@ export async function saveAiItinerary(
     radiusMiles: params.radiusMiles ?? null,
     interests: params.interests,
     stops: stopIds,
+    coverImageUrl,
     memberUids: [user.uid],
     memberUsernames: [user.displayName ?? user.email ?? ""],
     inviteCode,
