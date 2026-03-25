@@ -12,8 +12,14 @@ export interface ItineraryModel {
   startDate: string; // "YYYY-MM-DD"
   endDate: string; // "YYYY-MM-DD"
   radiusMiles: number | null;
+
   interests: string[]; // e.g. ["museums", "local cuisine"]
+  memberInterestsByUid?: Record<string, string[]>;
+  
   stops: string[]; // ordered array of stopIds
+
+  // Images
+  imageUrl?: string; // user-uploaded photo
 
   // Access control
   // ownerUid is always at index 0; everyone else in memberUids is an editor

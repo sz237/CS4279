@@ -1,3 +1,9 @@
+import { auth } from "@/src/config/firebase";
+import type { ItineraryModel } from "@/src/models";
+import {
+  findItineraryByCode,
+  joinItineraryByCode,
+} from "@/src/services/trips";
 import { Ionicons } from "@expo/vector-icons";
 import { useState } from "react";
 import {
@@ -11,12 +17,6 @@ import {
   TouchableWithoutFeedback,
   View,
 } from "react-native";
-import {
-  findItineraryByCode,
-  joinItineraryByCode,
-} from "@/src/services/trips";
-import type { ItineraryModel } from "@/src/models";
-import { auth } from "@/src/config/firebase";
 
 type Props = {
   visible: boolean;
@@ -47,8 +47,11 @@ const AVATAR_COLORS = [
 
 export function JoinTripModal({ visible, onClose, onJoined }: Props) {
   const [code, setCode] = useState("");
-  const [status, setStatus] = useState<"idle" | "searching" | "joining" | "error" | "already-member">("idle");
+  const [status, setStatus] = useState<
+    "idle" | "searching" | "joining" | "error" | "already-member"
+  >("idle");
   const [preview, setPreview] = useState<ItineraryModel | null>(null);
+  const [interestsRaw, setInterestsRaw] = useState("");
 
   function handleChangeText(text: string) {
     setCode(text);
@@ -58,6 +61,7 @@ export function JoinTripModal({ visible, onClose, onJoined }: Props) {
   async function handleSearch() {
     const trimmed = code.trim();
     if (!trimmed || status === "searching") return;
+
     setStatus("searching");
     try {
       const trip = await findItineraryByCode(trimmed);
@@ -74,14 +78,26 @@ export function JoinTripModal({ visible, onClose, onJoined }: Props) {
 
   async function handleJoin() {
     if (!preview || status === "joining") return;
+
     const uid = auth.currentUser?.uid;
     if (uid && preview.memberUids.includes(uid)) {
       setStatus("already-member");
       return;
     }
+
+    const selectedInterests = interestsRaw
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
+
     setStatus("joining");
+
     try {
-      const trip = await joinItineraryByCode(preview.inviteCode);
+      const trip = await joinItineraryByCode(
+        preview.inviteCode,
+        selectedInterests
+      );
+
       if (trip) {
         handleClose();
         onJoined(trip.id);
@@ -97,6 +113,7 @@ export function JoinTripModal({ visible, onClose, onJoined }: Props) {
     setCode("");
     setStatus("idle");
     setPreview(null);
+    setInterestsRaw("");
     onClose();
   }
 
@@ -114,7 +131,6 @@ export function JoinTripModal({ visible, onClose, onJoined }: Props) {
             className="w-full"
           >
             <View className="bg-white rounded-3xl px-6 pt-5 pb-8">
-              {/* Cancel */}
               <Pressable
                 onPress={handleClose}
                 className="self-end flex-row items-center gap-1 mb-3"
@@ -124,24 +140,26 @@ export function JoinTripModal({ visible, onClose, onJoined }: Props) {
               </Pressable>
 
               {preview ? (
-                /* ── Trip Preview ── */
                 <View>
                   <Text className="text-violet-600 text-xs font-bold tracking-widest uppercase mb-2">
                     Trip Overview
                   </Text>
+
                   <Text className="text-zinc-900 text-3xl font-extrabold mb-3">
                     {preview.cityOrArea}
                   </Text>
 
-                  {/* Dates */}
                   <View className="flex-row items-center gap-2 mb-6">
-                    <Ionicons name="calendar-outline" size={18} color="#52525B" />
+                    <Ionicons
+                      name="calendar-outline"
+                      size={18}
+                      color="#52525B"
+                    />
                     <Text className="text-zinc-600 text-base">
                       {formatDateRange(preview.startDate, preview.endDate)}
                     </Text>
                   </View>
 
-                  {/* Group Members */}
                   <Text className="text-zinc-900 text-lg font-bold mb-4">
                     Group Members{" "}
                     <Text className="text-gray-400 font-normal">
@@ -171,23 +189,39 @@ export function JoinTripModal({ visible, onClose, onJoined }: Props) {
                     ))}
                   </View>
 
-                  {/* Status messages */}
+                  <View className="mb-6">
+                    <Text className="text-[10px] font-bold text-neutral-600 uppercase tracking-[0.8px] mb-1.5 ml-1">
+                      Interests
+                    </Text>
+                    <View className="flex-row items-center bg-zinc-100 rounded-[10px] border border-zinc-300/30 px-3 py-2.5">
+                      <TextInput
+                        value={interestsRaw}
+                        onChangeText={setInterestsRaw}
+                        placeholder="Matcha, Coffee, Run…"
+                        placeholderTextColor="#A1A1AA"
+                        className="flex-1 text-sm font-medium text-zinc-900"
+                      />
+                    </View>
+                  </View>
+
                   {status === "already-member" && (
                     <Text className="text-amber-600 text-sm text-center mb-4">
                       You're already a member of this trip.
                     </Text>
                   )}
+
                   {status === "error" && (
                     <Text className="text-red-500 text-sm text-center mb-4">
                       Something went wrong. Please try again.
                     </Text>
                   )}
 
-                  {/* Join Trip CTA */}
                   <Pressable
                     onPress={handleJoin}
                     disabled={status === "joining" || status === "already-member"}
-                    className={`rounded-2xl py-4 items-center ${status === "already-member" ? "bg-gray-300" : "bg-violet-600"}`}
+                    className={`rounded-2xl py-4 items-center ${
+                      status === "already-member" ? "bg-gray-300" : "bg-violet-600"
+                    }`}
                   >
                     <Text className="text-white font-bold text-base">
                       {status === "joining" ? "Joining..." : "Join Trip"}
@@ -195,7 +229,6 @@ export function JoinTripModal({ visible, onClose, onJoined }: Props) {
                   </Pressable>
                 </View>
               ) : (
-                /* ── Code Entry ── */
                 <View>
                   <Text className="text-2xl font-extrabold text-zinc-900 text-center mt-1 mb-2">
                     Join a Trip
