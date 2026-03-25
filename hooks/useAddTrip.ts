@@ -212,23 +212,29 @@ export function useAddTrip() {
     }
   }, [GOOGLE_PLACES_API_KEY, cityOrArea, startDate, endDate, interests, radiusMiles]);
 
-  const addExtraToDay = useCallback((stop: TripStop, dayIndex: number) => {
+  const addExtraToDay = useCallback((stop: TripStop, dayIndex: number, aiTime?: string) => {
+    const SLOT_ORDER: Record<string, number> = { morning: 0, noon: 1, afternoon: 2, evening: 3 };
+    const slotOrder = (t: string) => SLOT_ORDER[t?.toLowerCase()] ?? 4;
+
     setAiDays((prev) => {
       if (!prev) return prev;
       const updated = [...prev];
-      updated[dayIndex] = {
-        ...updated[dayIndex],
-        activities: [
-          ...updated[dayIndex].activities,
-          {
-            ...stop,
-            aiTime: "TBD",
-            aiDurationMinutes: 60,
-            aiCategory: "attraction",
-            aiTravelMode: "drive" as TravelMode,
-          },
-        ],
+      const existing = updated[dayIndex].activities;
+      const newActivity = {
+        ...stop,
+        aiTime: aiTime ?? "TBD",
+        aiDurationMinutes: 60,
+        aiCommuteMinutes: null,
+        aiCategory: "attraction",
+        aiTravelMode: "drive" as TravelMode,
       };
+      const newOrder = slotOrder(aiTime ?? "");
+      const insertAt = existing.findIndex((a) => slotOrder(a.aiTime) > newOrder);
+      const activities =
+        insertAt === -1
+          ? [...existing, newActivity]
+          : [...existing.slice(0, insertAt), newActivity, ...existing.slice(insertAt)];
+      updated[dayIndex] = { ...updated[dayIndex], activities };
       return updated;
     });
     setAiExtraStops((prev) => prev.filter((s) => s.id !== stop.id));
@@ -345,6 +351,18 @@ export function useAddTrip() {
     await Linking.openURL(url);
   }, [aiDays]);
 
+  const resetForm = useCallback(() => {
+    setCityOrArea("");
+    setRadiusMiles("5");
+    setInterestsRaw("");
+    setPlaces([]);
+    setSelectedIds({});
+    setFinalStops(null);
+    setAiDays(null);
+    setAiExtraStops([]);
+    setSelectedAiDayIdx(0);
+  }, []);
+
   return {
     // form
     cityOrArea, setCityOrArea,
@@ -372,6 +390,7 @@ export function useAddTrip() {
     addExtraToDay,
     saveAiTrip,
     exportAiRoute,
+    resetForm,
     // trip
     saveFinalTrip,
     exportItineraryToGoogleMaps,

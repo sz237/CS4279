@@ -16,7 +16,7 @@ import { useItinerarySheet } from "@/lib/ItinerarySheetContext";
 import { useTrips } from "@/context/TripsContext";
 import { useStops } from "@/hooks/useStops";
 import type { StopModel } from "@/src/models";
-import { saveStop } from "@/src/services/trips";
+import { saveStop, deleteStop, reorderAndRelabelStops, updateStop } from "@/src/services/trips";
 import { collection, doc } from "firebase/firestore";
 import { db } from "@/src/config/firebase";
 
@@ -63,20 +63,6 @@ function EmptyState() {
   );
 }
 
-function AddActivityFooter({ onPress }: { onPress: () => void }) {
-  return (
-    <View className="px-4 pt-2 pb-6">
-      <TouchableOpacity
-        onPress={onPress}
-        activeOpacity={0.85}
-        className="flex-row items-center justify-center gap-2 border-2 border-dashed border-gray-300 rounded-2xl py-4"
-      >
-        <Ionicons name="add" size={18} color="#6B7280" />
-        <Text className="text-gray-500 font-semibold">Add Activity</Text>
-      </TouchableOpacity>
-    </View>
-  );
-}
 
 // ─── Main screen ───────────────────────────────────────────────────────────────
 
@@ -94,6 +80,25 @@ export default function ItineraryTab() {
   const [selectedDayId, setSelectedDayId] = useState("");
   const [isEditMode, setIsEditMode] = useState(false);
   const [addModalVisible, setAddModalVisible] = useState(false);
+  const [pendingAddSlot, setPendingAddSlot] = useState<string | undefined>(undefined);
+
+  const handleRemove = useCallback(async (stopId: string) => {
+    if (!selectedTripId) return;
+    await deleteStop(selectedTripId, stopId);
+  }, [selectedTripId]);
+
+  const handleTimeChange = useCallback(async (stopId: string, newTime: string) => {
+    if (!selectedTripId) return;
+    await updateStop(selectedTripId, stopId, { timeLabel: newTime });
+  }, [selectedTripId]);
+
+  const handleReorder = useCallback(async (newOrder: Activity[]) => {
+    if (!selectedTripId) return;
+    await reorderAndRelabelStops(
+      selectedTripId,
+      newOrder.map((a) => ({ id: a.id, timeLabel: a.time }))
+    );
+  }, [selectedTripId]);
 
   const handleAddActivity = useCallback(async (input: ManualStopInput) => {
     if (!selectedTripId) return;
@@ -205,9 +210,10 @@ export default function ItineraryTab() {
 
             <EditableItineraryList
               activities={activities}
-              stopsForDay={stopsForDay}
-              onAddActivity={() => setAddModalVisible(true)}
-              onRemove={() => {}}
+              onAddActivity={(slot) => { setPendingAddSlot(slot); setAddModalVisible(true); }}
+              onRemove={handleRemove}
+              onReorder={handleReorder}
+              onTimeChange={handleTimeChange}
             />
 
           </>
@@ -232,9 +238,6 @@ export default function ItineraryTab() {
               containerStyle={{ flex: 1 }}
               contentContainerStyle={{ paddingTop: 4, paddingBottom: 16 }}
               ListEmptyComponent={<EmptyState />}
-              ListFooterComponent={
-                activities.length > 0 ? <AddActivityFooter onPress={() => {}} /> : null
-              }
             />
           </>
         )}
@@ -242,8 +245,9 @@ export default function ItineraryTab() {
 
       <AddActivityModal
         visible={addModalVisible}
-        onClose={() => setAddModalVisible(false)}
+        onClose={() => { setAddModalVisible(false); setPendingAddSlot(undefined); }}
         onAdd={handleAddActivity}
+        defaultTimeLabel={pendingAddSlot}
       />
     </View>
   );

@@ -2,6 +2,7 @@ import { db, auth } from "@/src/config/firebase";
 import {
   arrayUnion,
   collection,
+  deleteDoc,
   doc,
   getDoc,
   getDocs,
@@ -11,6 +12,7 @@ import {
   setDoc,
   updateDoc,
   where,
+  writeBatch,
 } from "firebase/firestore";
 import type { ItineraryModel, ItineraryStatus, StopModel } from "@/src/models";
 import type { AIDayResult } from "@/services/types";
@@ -106,6 +108,53 @@ export async function joinItineraryByCode(
 }
 
 // ─── Stops ────────────────────────────────────────────────────────────────────
+
+/** Partially update a stop document. */
+export async function updateStop(
+  itineraryId: string,
+  stopId: string,
+  fields: Partial<StopModel>
+): Promise<void> {
+  await updateDoc(doc(db, "itineraries", itineraryId, "stops", stopId), fields);
+}
+
+/** Delete a stop from an itinerary. */
+export async function deleteStop(
+  itineraryId: string,
+  stopId: string
+): Promise<void> {
+  await deleteDoc(doc(db, "itineraries", itineraryId, "stops", stopId));
+}
+
+/** Batch-update both orderIndex and timeLabel for a reordered + relabelled list. */
+export async function reorderAndRelabelStops(
+  itineraryId: string,
+  stops: { id: string; timeLabel: string }[]
+): Promise<void> {
+  const batch = writeBatch(db);
+  stops.forEach(({ id, timeLabel }, index) => {
+    batch.update(
+      doc(db, "itineraries", itineraryId, "stops", id),
+      { orderIndex: index, timeLabel }
+    );
+  });
+  await batch.commit();
+}
+
+/** Batch-update orderIndex for a reordered list of stop IDs. */
+export async function reorderStops(
+  itineraryId: string,
+  orderedStopIds: string[]
+): Promise<void> {
+  const batch = writeBatch(db);
+  orderedStopIds.forEach((stopId, index) => {
+    batch.update(
+      doc(db, "itineraries", itineraryId, "stops", stopId),
+      { orderIndex: index }
+    );
+  });
+  await batch.commit();
+}
 
 /** Write a stop under an itinerary. */
 export async function saveStop(
