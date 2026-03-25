@@ -19,7 +19,10 @@ export default function HomeScreen() {
 
   function openTrip(id: string) {
     selectTrip(id);
-    router.push("/(tabs)/itinerary/overview" as never);
+    router.push({
+      pathname: "/(tabs)/itinerary/overview",
+      params: { from: "home" },
+    });
   }
 
   return (
@@ -32,7 +35,7 @@ export default function HomeScreen() {
       }}
       showsVerticalScrollIndicator={false}
     >
-      <Text className="mb-6 text-3xl font-extrabold leading-[48px] text-zinc-900">
+      <Text className="mb-1 text-3xl font-extrabold leading-[48px] text-zinc-900">
         Your Trips
       </Text>
 
@@ -40,8 +43,13 @@ export default function HomeScreen() {
         <ActivityIndicator size="large" color="#6D28D9" style={{ marginTop: 40 }} />
       ) : (
         <>
+          <TripActionsMenu
+            onJoinTrip={() => setJoinModalVisible(true)}
+            onCreateTrip={() => router.push("/(tabs)/addTrip" as never)}
+          />
+
           {currentTrip ? (
-            <View>
+            <View className="mt-4">
               <Text className="mb-4 text-2xl font-bold text-zinc-900">Current Trip</Text>
               <TripPreviewCard
                 trip={currentTrip}
@@ -51,7 +59,7 @@ export default function HomeScreen() {
           ) : null}
 
           {upcomingTrips.length > 0 ? (
-            <View className={currentTrip ? "mt-8" : "mt-0"}>
+            <View className={currentTrip ? "mt-4" : "mt-4"}>
               <Text className="mb-4 text-2xl font-bold text-zinc-900">Upcoming Trips</Text>
               {upcomingTrips.map((trip: ItineraryModel) => (
                 <TripPreviewCard
@@ -70,11 +78,6 @@ export default function HomeScreen() {
               </Text>
             </View>
           ) : null}
-
-          <TripActionsMenu
-            onJoinTrip={() => setJoinModalVisible(true)}
-            onCreateTrip={() => router.push("/(tabs)/addTrip" as never)}
-          />
 
           <JoinTripModal
             visible={joinModalVisible}

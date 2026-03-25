@@ -220,7 +220,7 @@ export default function ProfileScreen() {
           </View>
         </Card>
 
-        <View className="mb-4 flex-row gap-3">
+        <View className="mb-4 flex-row gap-4">
           <StatPill
             label="Following"
             value={followingForUI.length}
@@ -246,7 +246,7 @@ export default function ProfileScreen() {
         <View className="mb-4">
           <SectionHeader title="Trips" />
           <Card className="p-0">
-            <View className="px-4">
+            <View className="px-2">
               <NavRow
                 icon="briefcase-outline"
                 title="My Trips"
@@ -260,7 +260,7 @@ export default function ProfileScreen() {
         <View className="mb-4">
           <SectionHeader title="Settings" />
           <Card className="p-0">
-            <View className="px-4">
+            <View className="px-2">
               <NavRow
                 icon="notifications-outline"
                 title="Push Notifications"
@@ -269,7 +269,7 @@ export default function ProfileScreen() {
               />
             </View>
             <View className="h-px bg-gray-100" />
-            <View className="px-4">
+            <View className="px-2">
               <NavRow
                 icon="shield-checkmark-outline"
                 title="Privacy & Security"
@@ -278,7 +278,7 @@ export default function ProfileScreen() {
               />
             </View>
             <View className="h-px bg-gray-100" />
-            <View className="px-4">
+            <View className="px-2">
               <NavRow
                 icon="help-circle-outline"
                 title="Help & Support"
@@ -289,24 +289,26 @@ export default function ProfileScreen() {
           </Card>
         </View>
 
+        <View className="mb-4">
+          <SectionHeader title="Account" />
+          <Card className="p-0">
+            <Pressable
+              onPress={handleSignOut}
+              className="flex-row items-center justify-center py-1"
+            >
+              <Ionicons name="log-out-outline" size={22} color="#DC2626" />
+              <Text className="ml-2 text-lg font-medium text-red-600">
+                Log Out
+              </Text>
+            </Pressable>
+          </Card>
+        </View>
+
         {loading ? (
           <Text className="text-sm text-slate-400">Loading profile…</Text>
         ) : null}
-      </ScrollView>
 
-      <View className="border-t border-gray-200 bg-gray-50 px-3 pb-3 pt-2">
-        <Card className="p-0">
-          <Pressable
-            onPress={handleSignOut}
-            className="flex-row items-center justify-center py-1"
-          >
-            <Ionicons name="log-out-outline" size={22} color="#DC2626" />
-            <Text className="ml-2 text-lg font-medium text-red-600">
-              Log Out
-            </Text>
-          </Pressable>
-        </Card>
-      </View>
+      </ScrollView>
     </View>
   );
 }

@@ -1,17 +1,18 @@
 import type { ItineraryModel } from "@/src/models";
 import {
-    changeTripCoverPhoto,
-    getTripPreviewImageUri,
+  changeTripCoverPhoto,
+  getTripPreviewImageUri,
 } from "@/src/services/trips";
 import { Ionicons } from "@expo/vector-icons";
-import { useEffect, useState } from "react";
+import { useFocusEffect } from "@react-navigation/native";
+import { useCallback, useEffect, useState } from "react";
 import {
-    Alert,
-    ImageBackground,
-    Pressable,
-    Text,
-    TouchableOpacity,
-    View,
+  Alert,
+  ImageBackground,
+  Pressable,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 
 function StarRating({
@@ -76,27 +77,24 @@ export function TripPreviewCard({
   const [coverUrl, setCoverUrl] = useState<string | null>(trip.coverImageUrl ?? null);
   const [changingPhoto, setChangingPhoto] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadPreviewImage() {
-      const uri = await getTripPreviewImageUri({
-        id: trip.id,
-        cityOrArea: trip.cityOrArea,
-        coverImageUrl: trip.coverImageUrl ?? null,
-      });
-
-      if (!cancelled) {
-        setCoverUrl(uri);
-      }
-    }
-
-    loadPreviewImage();
-
-    return () => {
-      cancelled = true;
-    };
+  const loadPreviewImage = useCallback(async () => {
+    const uri = await getTripPreviewImageUri({
+      id: trip.id,
+      cityOrArea: trip.cityOrArea,
+      coverImageUrl: trip.coverImageUrl ?? null,
+    });
+    setCoverUrl(uri);
   }, [trip.id, trip.cityOrArea, trip.coverImageUrl]);
+
+  useEffect(() => {
+    loadPreviewImage();
+  }, [loadPreviewImage]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadPreviewImage();
+    }, [loadPreviewImage])
+  );
 
   const handleChangePhoto = async () => {
     try {
@@ -106,13 +104,19 @@ export function TripPreviewCard({
         cityOrArea: trip.cityOrArea,
         coverImageUrl: coverUrl,
       });
-      if (next) setCoverUrl(next);
+      if (next) {
+        setCoverUrl(next);
+      } else {
+        await loadPreviewImage();
+      }
     } catch (error: any) {
       Alert.alert("Change Photo Failed", error?.message ?? "Could not update cover photo.");
     } finally {
       setChangingPhoto(false);
     }
   };
+
+  const shouldShowRatingFooter = showFooter && canRate;
 
   return (
     <Pressable
@@ -143,7 +147,9 @@ export function TripPreviewCard({
             <View className="flex-1 pr-3">
               <View
                 className="self-start rounded-full px-3 py-1"
-                style={{ backgroundColor: coverUrl ? "rgba(255,255,255,0.18)" : "#EEF2FF" }}
+                style={{
+                  backgroundColor: coverUrl ? "rgba(255,255,255,0.18)" : "#EEF2FF",
+                }}
               >
                 <Text
                   className="text-xs font-bold uppercase tracking-widest"
@@ -187,14 +193,14 @@ export function TripPreviewCard({
             </TouchableOpacity>
           </View>
 
-          {showFooter ? (
+          {shouldShowRatingFooter ? (
             <>
               <View className="flex-row items-center justify-between">
                 <Text
                   className="text-sm font-medium"
                   style={{ color: coverUrl ? "#FFFFFF" : "#111827" }}
                 >
-                  {canRate ? "Rate this trip" : "Rating available after the trip ends"}
+                  Your rating
                 </Text>
 
                 {onShareTrip ? (
@@ -215,7 +221,7 @@ export function TripPreviewCard({
               <View className="mt-2">
                 <StarRating
                   value={rating}
-                  onChange={canRate ? onChangeRating : undefined}
+                  onChange={onChangeRating}
                 />
               </View>
             </>

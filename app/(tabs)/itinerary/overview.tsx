@@ -1,8 +1,9 @@
 import { MemberChip } from "@/components/itinerary/MemberChip";
-import { useItinerarySheet } from "@/lib/ItinerarySheetContext";
 import { useTrips } from "@/context/TripsContext";
+import { useItinerarySheet } from "@/lib/ItinerarySheetContext";
 import { updateItinerary } from "@/src/services/trips";
 import { Ionicons } from "@expo/vector-icons";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { Pressable, ScrollView, Share, Text, TextInput, View } from "react-native";
 
@@ -17,10 +18,16 @@ function formatDateRange(start: string, end: string): string {
 }
 
 export default function OverviewScreen() {
+  const router = useRouter();
+  const params = useLocalSearchParams<{ from?: string }>();
+
   const { reportStickyHeaderHeight, setMapDay, openEditModal } = useItinerarySheet();
 
   // Reset map to show all stops when overview is active
-  useEffect(() => { setMapDay(null); }, []);
+  useEffect(() => {
+    setMapDay(null);
+  }, [setMapDay]);
+
   const { trips, selectedTripId } = useTrips();
   const trip = trips.find((t) => t.id === selectedTripId) ?? null;
 
@@ -28,6 +35,7 @@ export default function OverviewScreen() {
   const [notes, setNotes] = useState(trip?.notes ?? "");
   const [notesDraft, setNotesDraft] = useState(trip?.notes ?? "");
   const [notesSaving, setNotesSaving] = useState(false);
+
   const members = trip?.memberUsernames ?? [];
   const dateRange = trip ? formatDateRange(trip.startDate, trip.endDate) : "";
   const inviteCode = trip?.inviteCode ?? null;
@@ -38,7 +46,16 @@ export default function OverviewScreen() {
       setNotes(trip?.notes ?? "");
       setNotesDraft(trip?.notes ?? "");
     }
-  }, [trip?.notes]);
+  }, [trip?.notes, notesEditMode]);
+
+  function handleBack() {
+    if (params.from === "my-trips") {
+      router.push("/(tabs)/profile/my-trips" as never);
+      return;
+    }
+
+    router.push("/(tabs)" as never);
+  }
 
   function handleNotesEdit() {
     setNotesDraft(notes);
@@ -69,12 +86,26 @@ export default function OverviewScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: "#F9FAFB" }}>
-      {/* ── Sticky header: title + dates ── */}
+      {/* ── Sticky header: back button + title + dates ── */}
       <View
-        style={{ backgroundColor: "#F9FAFB", paddingHorizontal: 24, paddingTop: 24, paddingBottom: 20 }}
+        style={{
+          backgroundColor: "#F9FAFB",
+          paddingHorizontal: 24,
+          paddingTop: 24,
+          paddingBottom: 20,
+        }}
         onLayout={(e) => reportStickyHeaderHeight(e.nativeEvent.layout.height)}
       >
-        <View className="flex-row items-start justify-between" style={{ gap: 4 }}>
+        <View className="flex-row items-start justify-between" style={{ gap: 12 }}>
+          {/* Back button */}
+          <Pressable
+            onPress={handleBack}
+            className="w-10 h-10 rounded-full bg-gray-100 items-center justify-center mt-1"
+            accessibilityLabel="Go back"
+          >
+            <Ionicons name="chevron-back" size={20} color="#71717A" />
+          </Pressable>
+
           <View className="flex-1" style={{ gap: 4 }}>
             <Text
               style={{
@@ -87,16 +118,18 @@ export default function OverviewScreen() {
             >
               Trip Overview
             </Text>
+
             <Text style={{ fontSize: 30, fontWeight: "800", color: "#18181B" }}>
               {trip?.title ?? "Your Trip"}
             </Text>
+
             <View className="flex-row items-center gap-1.5 mt-1">
               <Ionicons name="calendar-outline" size={15} color="#71717A" />
               <Text className="text-zinc-500 text-sm">{dateRange}</Text>
             </View>
           </View>
 
-          {/* Subtle edit button */}
+          {/* Edit button */}
           <Pressable
             onPress={openEditModal}
             className="w-8 h-8 rounded-full bg-gray-100 items-center justify-center mt-1"
@@ -209,7 +242,11 @@ export default function OverviewScreen() {
               </View>
             </>
           ) : (
-            <Pressable onPress={handleNotesEdit} className="bg-gray-100 rounded-xl px-4 py-3" style={{ minHeight: 80 }}>
+            <Pressable
+              onPress={handleNotesEdit}
+              className="bg-gray-100 rounded-xl px-4 py-3"
+              style={{ minHeight: 80 }}
+            >
               <Text className={`text-sm ${notes ? "text-zinc-900" : "text-zinc-400"}`}>
                 {notes || "Add notes for the group…"}
               </Text>

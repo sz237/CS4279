@@ -116,7 +116,10 @@ export default function MyTripsScreen() {
 
   const openTrip = (tripId: string) => {
     selectTrip(tripId);
-    router.push("/(tabs)/itinerary/overview" as never);
+    router.push({
+      pathname: "/(tabs)/itinerary/overview",
+      params: { from: "my-trips" },
+    });
   };
 
   const currentUid = auth.currentUser?.uid ?? null;
@@ -166,7 +169,7 @@ export default function MyTripsScreen() {
       {/* Sticky header */}
       <View
         style={{
-          paddingTop: insets.top + 12,
+          paddingTop: insets.top - 48,
           paddingHorizontal: 20,
           paddingBottom: 12,
         }}
