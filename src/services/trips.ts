@@ -1,4 +1,6 @@
-import { db, auth } from "@/src/config/firebase";
+import type { AIDayResult } from "@/services/types";
+import { auth, db } from "@/src/config/firebase";
+import type { ItineraryModel, ItineraryStatus, StopModel } from "@/src/models";
 import {
   arrayUnion,
   collection,
@@ -14,8 +16,6 @@ import {
   where,
   writeBatch,
 } from "firebase/firestore";
-import type { ItineraryModel, ItineraryStatus, StopModel } from "@/src/models";
-import type { AIDayResult } from "@/services/types";
 
 // ─── Itineraries ──────────────────────────────────────────────────────────────
 
@@ -79,7 +79,8 @@ export async function findItineraryByCode(
  * Returns the itinerary if found, null if the code is invalid.
  */
 export async function joinItineraryByCode(
-  inviteCode: string
+  inviteCode: string,
+  selectedInterests: string[] = []
 ): Promise<ItineraryModel | null> {
   const user = auth.currentUser;
   if (!user) return null;
@@ -95,12 +96,19 @@ export async function joinItineraryByCode(
   const ref = snap.docs[0].ref;
   const itinerary = snap.docs[0].data() as ItineraryModel;
 
-  // Already a member — nothing to do
-  if (itinerary.memberUids.includes(user.uid)) return itinerary;
+  if (itinerary.memberUids.includes(user.uid)) {
+    await updateDoc(ref, {
+      [`memberInterestsByUid.${user.uid}`]: selectedInterests,
+      updatedAt: new Date().toISOString(),
+    });
+
+    return itinerary;
+  }
 
   await updateDoc(ref, {
     memberUids: arrayUnion(user.uid),
     memberUsernames: arrayUnion(user.displayName ?? user.email ?? ""),
+    [`memberInterestsByUid.${user.uid}`]: selectedInterests,
     updatedAt: new Date().toISOString(),
   });
 

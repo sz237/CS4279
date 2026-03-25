@@ -1,4 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
+import * as ImagePicker from "expo-image-picker";
+import { useEffect, useState } from "react";
 import { Image, ImageSourcePropType, Pressable, Text, View } from "react-native";
 
 type Props = {
@@ -6,9 +8,46 @@ type Props = {
   city: string;
   dateRange: string;
   onPress?: () => void;
+  onChangeImage?: (uri: string) => Promise<void> | void;
 };
 
-export function UpcomingTripCard({ imageSource, city, dateRange, onPress }: Props) {
+export function UpcomingTripCard({
+  imageSource,
+  city,
+  dateRange,
+  onPress,
+  onChangeImage,
+}: Props) {
+  const [image, setImage] = useState(imageSource);
+
+  useEffect(() => {
+    setImage(imageSource);
+  }, [imageSource]);
+
+  const pickImage = async () => {
+    const permissionResult =
+      await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+    if (!permissionResult.granted) {
+      alert("Permission required to access photos");
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [4, 3],
+      quality: 0.8,
+    });
+
+    if (!result.canceled) {
+      const uri = result.assets[0].uri;
+
+      setImage({ uri }); // instant local preview
+      await onChangeImage?.(uri); // let parent save to Firebase
+    }
+  };
+
   return (
     <Pressable
       onPress={onPress}
@@ -21,7 +60,22 @@ export function UpcomingTripCard({ imageSource, city, dateRange, onPress }: Prop
         elevation: 6,
       }}
     >
-      <Image source={imageSource} className="w-full" style={{ height: 192 }} resizeMode="cover" />
+      <View>
+        <Image
+          source={image}
+          className="w-full"
+          style={{ height: 192 }}
+          resizeMode="cover"
+        />
+
+        <Pressable
+          onPress={pickImage}
+          className="absolute bottom-3 right-3 bg-black/60 px-3 py-1.5 rounded-full"
+        >
+          <Text className="text-white text-xs font-medium">Change Photo</Text>
+        </Pressable>
+      </View>
+
       <View className="px-6 py-5 flex-row justify-between items-center">
         <View>
           <Text className="text-zinc-900 text-xl font-bold">{city}</Text>
