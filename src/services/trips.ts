@@ -1,5 +1,10 @@
 import type { AIDayResult } from "@/services/types";
 import { auth, db } from "@/src/config/firebase";
+import {
+  getBestPhotoUrl,
+  searchText,
+  type PlaceV1,
+} from "@/src/googlePlaces";
 import type { ItineraryModel, ItineraryStatus, StopModel } from "@/src/models";
 import {
   arrayUnion,
@@ -53,6 +58,69 @@ export async function getUserItineraries(): Promise<ItineraryModel[]> {
   );
   const snap = await getDocs(q);
   return snap.docs.map((d) => d.data() as ItineraryModel);
+}
+
+async function fetchCityCoverImageUrl(
+  cityOrArea: string,
+  excludeUrl?: string | null
+): Promise<string | null> {
+  const apiKey = process.env.EXPO_PUBLIC_googlePlacesApiKey as string | undefined;
+  if (!apiKey || !cityOrArea.trim()) return null;
+
+  try {
+    const resp = await searchText({
+      apiKey,
+      textQuery: cityOrArea,
+      maxResultCount: 10,
+    });
+
+    const candidates = (resp.places ?? [])
+      .filter((p: PlaceV1) => p.photos && p.photos.length > 0)
+      .map((p) =>
+        getBestPhotoUrl({
+          apiKey,
+          place: p,
+          maxWidthPx: 1200,
+        })
+      )
+      .filter((url): url is string => !!url)
+      .filter((url) => url !== excludeUrl);
+
+    if (candidates.length === 0) return null;
+
+    const chosen =
+      candidates[Math.floor(Math.random() * candidates.length)] ?? candidates[0];
+
+    return chosen;
+  } catch {
+    return null;
+  }
+}
+
+export async function ensureTripCoverImage(
+  trip: Pick<ItineraryModel, "id" | "cityOrArea" | "coverImageUrl">
+): Promise<string | null> {
+  if (trip.coverImageUrl) return trip.coverImageUrl;
+
+  const url = await fetchCityCoverImageUrl(trip.cityOrArea);
+  if (!url) return null;
+
+  await updateItinerary(trip.id, { coverImageUrl: url });
+  return url;
+}
+
+export async function changeTripCoverPhoto(
+  trip: Pick<ItineraryModel, "id" | "cityOrArea" | "coverImageUrl">
+): Promise<string | null> {
+  const newUrl = await fetchCityCoverImageUrl(
+    trip.cityOrArea,
+    trip.coverImageUrl ?? null
+  );
+
+  if (!newUrl) return trip.coverImageUrl ?? null;
+
+  await updateItinerary(trip.id, { coverImageUrl: newUrl });
+  return newUrl;
 }
 
 // ─── Joining ──────────────────────────────────────────────────────────────────
@@ -248,6 +316,7 @@ export async function saveAiItinerary(
 
   const stopIds = allActivities.map((_, i) => `${itineraryId}_stop_${i}`);
   const inviteCode = await generateUniqueInviteCode(params.cityOrArea);
+  const coverImageUrl = await fetchCityCoverImageUrl(params.cityOrArea);
 
   const itinerary: ItineraryModel = {
     id: itineraryId,
@@ -259,6 +328,7 @@ export async function saveAiItinerary(
     radiusMiles: params.radiusMiles ?? null,
     interests: params.interests,
     stops: stopIds,
+    coverImageUrl,
     memberUids: [user.uid],
     memberUsernames: [user.displayName ?? user.email ?? ""],
     inviteCode,

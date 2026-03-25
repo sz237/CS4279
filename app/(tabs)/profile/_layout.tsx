@@ -12,9 +12,9 @@ export default function ProfileLayout() {
         }}
       />
       <Stack.Screen
-        name="past-trips"
+        name="my-trips"
         options={{
-          title: "Past Trips",
+          title: "My Trips",
           headerBackTitle: "Profile",
         }}
       />

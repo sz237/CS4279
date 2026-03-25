@@ -18,8 +18,9 @@ export interface ItineraryModel {
   
   stops: string[]; // ordered array of stopIds
 
-  // Images
+  // Cover image for Home / Past Trips preview cards
   imageUrl?: string; // user-uploaded photo
+  coverImageUrl: string | null;
 
   // Access control
   // ownerUid is always at index 0; everyone else in memberUids is an editor

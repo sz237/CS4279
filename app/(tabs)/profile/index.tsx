@@ -1,11 +1,11 @@
 import { auth } from "@/src/config/firebase";
 import {
-    ProfileUser,
-    getCurrentUserProfile,
-    getFollowers,
-    getFollowersForUI,
-    getFollowing,
-    getFollowingForUI,
+  ProfileUser,
+  getCurrentUserProfile,
+  getFollowers,
+  getFollowersForUI,
+  getFollowing,
+  getFollowingForUI,
 } from "@/src/services/profile";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
@@ -13,12 +13,12 @@ import { useRouter } from "expo-router";
 import { signOut } from "firebase/auth";
 import { useCallback, useMemo, useState } from "react";
 import {
-    Alert,
-    Image,
-    Pressable,
-    ScrollView,
-    Text,
-    View,
+  Alert,
+  Image,
+  Pressable,
+  ScrollView,
+  Text,
+  View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -251,7 +251,7 @@ export default function ProfileScreen() {
                 icon="briefcase-outline"
                 title="Past Trips"
                 subtitle="View, rate, share, and delete itineraries you created"
-                onPress={() => router.push("/(tabs)/profile/past-trips")}
+                onPress={() => router.push("/(tabs)/profile/my-trips")}
               />
             </View>
           </Card>
