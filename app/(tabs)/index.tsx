@@ -1,6 +1,6 @@
 import { JoinTripModal } from "@/components/home/JoinTripModal";
 import { TripActionsMenu } from "@/components/home/TripActionsMenu";
-import { TripPreviewCard } from "@/components/trips/tripPreviewCard";
+import { TripPreviewCard } from "@/components/trips/TripPreviewCard";
 import { useTrips } from "@/context/TripsContext";
 import type { ItineraryModel } from "@/src/models";
 import { useRouter } from "expo-router";

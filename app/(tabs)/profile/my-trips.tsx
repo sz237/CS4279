@@ -1,4 +1,4 @@
-import { TripPreviewCard } from "@/components/trips/tripPreviewCard";
+import { TripPreviewCard } from "@/components/trips/TripPreviewCard";
 import { useTrips } from "@/context/TripsContext";
 import { auth } from "@/src/config/firebase";
 import {
@@ -16,12 +16,16 @@ import { useCallback, useMemo, useState } from "react";
 import {
   Alert,
   ScrollView,
-  Share,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+
+function isEndedTrip(endDate: string) {
+  const today = new Date().toISOString().slice(0, 10);
+  return endDate < today;
+}
 
 export default function MyTripsScreen() {
   const insets = useSafeAreaInsets();
@@ -157,30 +161,18 @@ export default function MyTripsScreen() {
     ]);
   };
 
-  const shareTrip = async (tripId: string, title: string) => {
-    try {
-      const link = tripMeta[tripId]?.shareUrl || generateTripShareLink(tripId);
-
-      await Share.share({
-        message: `Check out my Nomad trip "${title}"! ${link}`,
-        url: link,
-        title,
-      });
-    } catch (error: any) {
-      Alert.alert("Share failed", error?.message ?? "Could not open share sheet.");
-    }
-  };
-
   return (
     <View className="flex-1 bg-gray-50">
-      <ScrollView
-        className="flex-1"
-        contentContainerStyle={{
-          padding: 20,
-          paddingBottom: selecting ? 84 : 20,
+      {/* Sticky header */}
+      <View
+        style={{
+          paddingTop: insets.top + 12,
+          paddingHorizontal: 20,
+          paddingBottom: 12,
         }}
+        className="border-b border-gray-200 bg-gray-50"
       >
-        <View className="mb-4 flex-row items-center justify-between">
+        <View className="flex-row items-center justify-between">
           <View>
             <Text className="text-2xl font-bold text-gray-900">My Trips</Text>
             <Text className="mt-1 text-sm text-slate-500">{sortedTrips.length} total</Text>
@@ -201,7 +193,15 @@ export default function MyTripsScreen() {
             </Text>
           </TouchableOpacity>
         </View>
+      </View>
 
+      <ScrollView
+        className="flex-1"
+        contentContainerStyle={{
+          padding: 20,
+          paddingBottom: selecting ? 84 : 20,
+        }}
+      >
         {sortedTrips.map((trip) => {
           const meta = tripMeta[trip.id] ?? {
             rating: 0,
@@ -218,10 +218,10 @@ export default function MyTripsScreen() {
               onPress={() => openTrip(trip.id)}
               showFooter
               rating={meta.rating}
+              canRate={isEndedTrip(trip.endDate)}
               onChangeRating={(value) =>
                 updateTripMeta(trip.id, { ...meta, rating: value })
               }
-              onShareTrip={() => shareTrip(trip.id, trip.title)}
             />
           );
         })}

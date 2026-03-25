@@ -1,7 +1,7 @@
 import type { ItineraryModel } from "@/src/models";
 import {
     changeTripCoverPhoto,
-    ensureTripCoverImage,
+    getTripPreviewImageUri,
 } from "@/src/services/trips";
 import { Ionicons } from "@expo/vector-icons";
 import { useEffect, useState } from "react";
@@ -56,6 +56,7 @@ type Props = {
 
   showFooter?: boolean;
   rating?: number;
+  canRate?: boolean;
   onChangeRating?: (value: number) => void;
   onShareTrip?: () => void;
 };
@@ -68,6 +69,7 @@ export function TripPreviewCard({
   onPress,
   showFooter = false,
   rating = 0,
+  canRate = true,
   onChangeRating,
   onShareTrip,
 }: Props) {
@@ -75,23 +77,26 @@ export function TripPreviewCard({
   const [changingPhoto, setChangingPhoto] = useState(false);
 
   useEffect(() => {
-    setCoverUrl(trip.coverImageUrl ?? null);
-  }, [trip.coverImageUrl]);
-
-  useEffect(() => {
     let cancelled = false;
 
-    async function maybeBackfillCover() {
-      if (trip.coverImageUrl) return;
-      const url = await ensureTripCoverImage(trip);
-      if (!cancelled && url) setCoverUrl(url);
+    async function loadPreviewImage() {
+      const uri = await getTripPreviewImageUri({
+        id: trip.id,
+        cityOrArea: trip.cityOrArea,
+        coverImageUrl: trip.coverImageUrl ?? null,
+      });
+
+      if (!cancelled) {
+        setCoverUrl(uri);
+      }
     }
 
-    maybeBackfillCover();
+    loadPreviewImage();
+
     return () => {
       cancelled = true;
     };
-  }, [trip]);
+  }, [trip.id, trip.cityOrArea, trip.coverImageUrl]);
 
   const handleChangePhoto = async () => {
     try {
@@ -189,7 +194,7 @@ export function TripPreviewCard({
                   className="text-sm font-medium"
                   style={{ color: coverUrl ? "#FFFFFF" : "#111827" }}
                 >
-                  Rate this trip
+                  {canRate ? "Rate this trip" : "Rating available after the trip ends"}
                 </Text>
 
                 {onShareTrip ? (
@@ -208,7 +213,10 @@ export function TripPreviewCard({
               </View>
 
               <View className="mt-2">
-                <StarRating value={rating} onChange={onChangeRating} />
+                <StarRating
+                  value={rating}
+                  onChange={canRate ? onChangeRating : undefined}
+                />
               </View>
             </>
           ) : null}

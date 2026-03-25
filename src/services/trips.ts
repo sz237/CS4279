@@ -6,6 +6,8 @@ import {
   type PlaceV1,
 } from "@/src/googlePlaces";
 import type { ItineraryModel, ItineraryStatus, StopModel } from "@/src/models";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as ImagePicker from "expo-image-picker";
 import {
   arrayUnion,
   collection,
@@ -21,6 +23,43 @@ import {
   where,
   writeBatch,
 } from "firebase/firestore";
+
+const LOCAL_TRIP_COVER_KEY = "nomad_local_trip_covers_v1";
+
+// ─── Local cover override helpers ─────────────────────────────────────────────
+
+async function getLocalTripCoverMap(): Promise<Record<string, string>> {
+  const raw = await AsyncStorage.getItem(LOCAL_TRIP_COVER_KEY);
+  if (!raw) return {};
+  try {
+    return JSON.parse(raw) as Record<string, string>;
+  } catch {
+    return {};
+  }
+}
+
+async function setLocalTripCoverUri(tripId: string, uri: string) {
+  const map = await getLocalTripCoverMap();
+  map[tripId] = uri;
+  await AsyncStorage.setItem(LOCAL_TRIP_COVER_KEY, JSON.stringify(map));
+}
+
+export async function getLocalTripCoverUri(tripId: string): Promise<string | null> {
+  const map = await getLocalTripCoverMap();
+  return map[tripId] ?? null;
+}
+
+export async function getTripPreviewImageUri(
+  trip: Pick<ItineraryModel, "id" | "cityOrArea" | "coverImageUrl">
+): Promise<string | null> {
+  const localUri = await getLocalTripCoverUri(trip.id);
+  if (localUri) return localUri;
+
+  if (trip.coverImageUrl) return trip.coverImageUrl;
+
+  const backfilled = await ensureTripCoverImage(trip);
+  return backfilled;
+}
 
 // ─── Itineraries ──────────────────────────────────────────────────────────────
 
@@ -109,18 +148,36 @@ export async function ensureTripCoverImage(
   return url;
 }
 
+/**
+ * Change the cover image by selecting from the device photo library.
+ * This stores a local URI override in AsyncStorage for now.
+ */
 export async function changeTripCoverPhoto(
   trip: Pick<ItineraryModel, "id" | "cityOrArea" | "coverImageUrl">
 ): Promise<string | null> {
-  const newUrl = await fetchCityCoverImageUrl(
-    trip.cityOrArea,
-    trip.coverImageUrl ?? null
-  );
+  const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
 
-  if (!newUrl) return trip.coverImageUrl ?? null;
+  if (!permission.granted) {
+    throw new Error("Photo library permission is required to choose a cover image.");
+  }
 
-  await updateItinerary(trip.id, { coverImageUrl: newUrl });
-  return newUrl;
+  const result = await ImagePicker.launchImageLibraryAsync({
+    mediaTypes: ImagePicker.MediaTypeOptions.Images,
+    allowsEditing: true,
+    quality: 0.9,
+  });
+
+  if (result.canceled || !result.assets?.length) {
+    return await getTripPreviewImageUri(trip);
+  }
+
+  const pickedUri = result.assets[0]?.uri;
+  if (!pickedUri) {
+    return await getTripPreviewImageUri(trip);
+  }
+
+  await setLocalTripCoverUri(trip.id, pickedUri);
+  return pickedUri;
 }
 
 // ─── Joining ──────────────────────────────────────────────────────────────────

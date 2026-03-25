@@ -249,7 +249,7 @@ export default function ProfileScreen() {
             <View className="px-4">
               <NavRow
                 icon="briefcase-outline"
-                title="Past Trips"
+                title="My Trips"
                 subtitle="View, rate, share, and delete itineraries you created"
                 onPress={() => router.push("/(tabs)/profile/my-trips")}
               />
