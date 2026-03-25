@@ -1,7 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   Alert,
+  Modal,
   Pressable,
   ScrollView,
   Text,
@@ -25,12 +26,25 @@ import { TripDatePicker } from "@/components/TripDatePicker";
 import { openStopInGoogleMaps } from "@/lib/trips";
 import { estimateTravelMinutes } from "@/services/routeService";
 import type { AIActivityStop } from "@/services/types";
+import type { TripStop } from "@/lib/trips";
 import { useAddTripContext } from "@/context/AddTripContext";
 import { saveAiItinerary } from "@/src/services/trips";
+
+type FlatItem =
+  | { kind: "header"; slot: string; label: string }
+  | { kind: "activity"; stop: AIActivityStop };
+
+const AI_SLOTS = [
+  { slot: "morning",   label: "Morning"   },
+  { slot: "noon",      label: "Noon"      },
+  { slot: "afternoon", label: "Afternoon" },
+  { slot: "evening",   label: "Evening"   },
+];
 
 export default function AddTripScreen() {
   const insets = useSafeAreaInsets();
   const [formExpanded, setFormExpanded] = useState(false);
+  const [pendingExtraStop, setPendingExtraStop] = useState<TripStop | null>(null);
 
   const {
     cityOrArea, setCityOrArea,
@@ -50,6 +64,7 @@ export default function AddTripScreen() {
     generateAiItinerary,
     addExtraToDay,
     exportAiRoute,
+    resetForm,
     formatDateRange,
     stopToActivity,
     GOOGLE_PLACES_API_KEY,
@@ -60,12 +75,44 @@ export default function AddTripScreen() {
   const currentAiActivities = currentAiDay?.activities ?? [];
   const selectedAiTabId = aiDayTabs[selectedAiDayIdx]?.id ?? aiDayTabs[0]?.id ?? "";
 
+  // Build flat list: fixed section headers + activities grouped under their slot
+  const flatData = useMemo<FlatItem[]>(() => {
+    const items: FlatItem[] = [];
+    for (const { slot, label } of AI_SLOTS) {
+      items.push({ kind: "header", slot, label });
+      for (const stop of currentAiActivities) {
+        if ((stop.aiTime?.toLowerCase() ?? "") === slot) {
+          items.push({ kind: "activity", stop });
+        }
+      }
+    }
+    // Activities with an unrecognised time fall under the last section
+    const knownSlots = new Set(AI_SLOTS.map((s) => s.slot));
+    for (const stop of currentAiActivities) {
+      if (!knownSlots.has(stop.aiTime?.toLowerCase() ?? "")) {
+        items.push({ kind: "activity", stop });
+      }
+    }
+    return items;
+  }, [currentAiActivities]);
+
   const handleDragEnd = useCallback(
-    ({ data }: { data: AIActivityStop[] }) => {
+    ({ data }: { data: FlatItem[] }) => {
+      // Walk the reordered flat list; each activity inherits the slot of the
+      // last header seen above it
+      let currentSlot = AI_SLOTS[0].slot;
+      const newActivities: AIActivityStop[] = [];
+      for (const item of data) {
+        if (item.kind === "header") {
+          currentSlot = item.slot;
+        } else {
+          newActivities.push({ ...item.stop, aiTime: currentSlot });
+        }
+      }
       setAiDays((prev) => {
         if (!prev) return prev;
         const updated = [...prev];
-        updated[selectedAiDayIdx] = { ...updated[selectedAiDayIdx], activities: data };
+        updated[selectedAiDayIdx] = { ...updated[selectedAiDayIdx], activities: newActivities };
         return updated;
       });
     },
@@ -90,36 +137,56 @@ export default function AddTripScreen() {
   const handleSaveToFirebase = useCallback(async () => {
     if (!aiDays) return;
     try {
-      const id = await saveAiItinerary(
+      await saveAiItinerary(
         { cityOrArea, radiusMiles: Number(radiusMiles) || undefined, startDate, endDate, interests },
         aiDays
       );
-      Alert.alert("Saved!", `Itinerary saved (ID: ${id}).`);
+      resetForm();
     } catch (e: any) {
       Alert.alert("Save failed", e?.message ?? "Unknown error");
     }
-  }, [aiDays, cityOrArea, radiusMiles, startDate, endDate, interests]);
+  }, [aiDays, cityOrArea, radiusMiles, startDate, endDate, interests, resetForm]);
 
-  const renderAiItem = useCallback(
-    ({ item, drag, isActive, getIndex }: RenderItemParams<AIActivityStop>) => {
+  const renderFlatItem = useCallback(
+    ({ item, drag, isActive, getIndex }: RenderItemParams<FlatItem>) => {
+      if (item.kind === "header") {
+        return (
+          <View className="px-5 pt-5 pb-1 flex-row items-center gap-3">
+            <Text className="text-xs font-bold text-zinc-400 uppercase tracking-widest">
+              {item.label}
+            </Text>
+            <View className="flex-1 h-px bg-zinc-200" />
+          </View>
+        );
+      }
+
+      // Find the next activity item in flatData for the commute connector
       const idx = getIndex?.() ?? 0;
-      const isLast = idx === currentAiActivities.length - 1;
-      const next = currentAiActivities[idx + 1];
-      const travelMin = next ? estimateTravelMinutes(item, next, item.aiTravelMode) : null;
-      const activity = stopToActivity(item, { labelRight: item.aiTime });
+      const nextActivityItem = flatData.slice(idx + 1).find((i) => i.kind === "activity");
+      const travelMin =
+        nextActivityItem && nextActivityItem.kind === "activity"
+          ? estimateTravelMinutes(item.stop, nextActivityItem.stop, item.stop.aiTravelMode)
+          : null;
+      const isLastActivity =
+        flatData.slice(idx + 1).every((i) => i.kind === "header");
 
       return (
         <ScaleDecorator>
-          <Pressable onLongPress={() => openStopInGoogleMaps(item)}>
-            <ActivityCard activity={activity} drag={drag} isActive={isActive} onRemove={handleRemoveFromDay} />
+          <Pressable onLongPress={() => openStopInGoogleMaps(item.stop)}>
+            <ActivityCard
+              activity={stopToActivity(item.stop, {})}
+              drag={drag}
+              isActive={isActive}
+              onRemove={handleRemoveFromDay}
+            />
           </Pressable>
-          {!isLast && travelMin !== null && (
-            <CommuteConnector minutes={travelMin} mode={item.aiTravelMode} />
+          {!isLastActivity && travelMin !== null && (
+            <CommuteConnector minutes={travelMin} mode={item.stop.aiTravelMode} />
           )}
         </ScaleDecorator>
       );
     },
-    [currentAiActivities, stopToActivity, handleRemoveFromDay]
+    [flatData, stopToActivity, handleRemoveFromDay]
   );
 
   const tripFormProps = {
@@ -162,29 +229,30 @@ export default function AddTripScreen() {
 
           <View className="flex-1 bg-gray-100 rounded-t-[40px] overflow-hidden">
             <DraggableFlatList
-              data={currentAiActivities}
-              keyExtractor={(item) => item.id}
-              renderItem={renderAiItem}
+              data={flatData}
+              keyExtractor={(item) => item.kind === "header" ? `header-${item.slot}` : item.stop.id}
+              renderItem={renderFlatItem}
               onDragEnd={handleDragEnd}
               containerStyle={{ flex: 1 }}
               contentContainerStyle={{ paddingTop: 4, paddingBottom: 100 }}
+              ListFooterComponent={
+                aiExtraStops.length > 0 ? (
+                  <View className="px-4 pb-2 pt-3">
+                    <Text className="text-base font-extrabold mb-1">You might also like</Text>
+                    <Text className="text-gray-500 text-[13px] mb-2">Tap + to add to Day</Text>
+                    {aiExtraStops.map((stop) => (
+                      <View key={stop.id} className="relative">
+                        <Pressable onPress={() => setPendingExtraStop(stop)} className="absolute right-3.5 top-2.5 z-20">
+                          <Ionicons name="add-circle" size={28} color="#7C3AED" />
+                        </Pressable>
+                        <ActivityCard activity={stopToActivity(stop, {})} />
+                      </View>
+                    ))}
+                  </View>
+                ) : null
+              }
             />
           </View>
-
-          {aiExtraStops.length > 0 && (
-            <View className="px-4 pb-2 pt-3">
-              <Text className="text-base font-extrabold mb-1">You might also like</Text>
-              <Text className="text-gray-500 text-[13px] mb-2">Tap + to add to Day 1</Text>
-              {aiExtraStops.map((stop) => (
-                <View key={stop.id} className="relative">
-                  <Pressable onPress={() => addExtraToDay(stop, 0)} className="absolute right-3.5 top-2.5 z-20">
-                    <Ionicons name="add-circle" size={28} color="#7C3AED" />
-                  </Pressable>
-                  <ActivityCard activity={stopToActivity(stop, {})} />
-                </View>
-              ))}
-            </View>
-          )}
 
           <View
             className="absolute bottom-0 left-0 right-0 bg-white border-t border-gray-100 flex-row items-center justify-between px-6"
@@ -265,6 +333,66 @@ export default function AddTripScreen() {
           </View>
         </ScrollView>
       )}
+
+      {/* ── Time-of-day picker for "You might also like" ── */}
+      <Modal
+        visible={pendingExtraStop !== null}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setPendingExtraStop(null)}
+      >
+        <Pressable
+          className="flex-1 bg-black/40 justify-end"
+          onPress={() => setPendingExtraStop(null)}
+        >
+          <Pressable onPress={(e) => e.stopPropagation()}>
+            <View className="bg-white rounded-t-3xl px-6 pt-5 pb-10">
+              {/* Handle */}
+              <View className="w-10 h-1 bg-gray-200 rounded-full self-center mb-5" />
+
+              <Text className="text-lg font-bold text-zinc-900 mb-1">
+                When does this fit best?
+              </Text>
+              <Text className="text-sm text-gray-400 mb-5">
+                {pendingExtraStop?.name}
+              </Text>
+
+              {[
+                { label: "Morning",   value: "morning",   icon: "sunny-outline" },
+                { label: "Noon",      value: "noon",      icon: "partly-sunny-outline" },
+                { label: "Afternoon", value: "afternoon", icon: "cloud-outline" },
+                { label: "Evening",   value: "evening",   icon: "moon-outline" },
+              ].map(({ label, value, icon }) => (
+                <TouchableOpacity
+                  key={value}
+                  activeOpacity={0.75}
+                  onPress={() => {
+                    if (pendingExtraStop) {
+                      addExtraToDay(pendingExtraStop, selectedAiDayIdx, value);
+                      setPendingExtraStop(null);
+                    }
+                  }}
+                  className="flex-row items-center gap-4 py-3.5 border-b border-gray-100"
+                >
+                  <View className="w-9 h-9 rounded-full bg-violet-50 items-center justify-center">
+                    <Ionicons name={icon as any} size={18} color="#7C3AED" />
+                  </View>
+                  <Text className="flex-1 text-base font-semibold text-zinc-900">{label}</Text>
+                  <Ionicons name="chevron-forward" size={16} color="#D1D5DB" />
+                </TouchableOpacity>
+              ))}
+
+              <TouchableOpacity
+                onPress={() => setPendingExtraStop(null)}
+                activeOpacity={0.7}
+                className="mt-4 py-3 items-center"
+              >
+                <Text className="text-sm font-semibold text-gray-400">Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       <TripDatePicker
         visible={datePickerVisible}

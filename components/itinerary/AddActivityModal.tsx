@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Modal,
   View,
@@ -20,24 +20,36 @@ export interface ManualStopInput {
   duration: string;
 }
 
-const TIME_OPTIONS = ["Morning", "Noon", "Evening", "Night"] as const;
+const TIME_OPTIONS = ["Morning", "Noon", "Afternoon", "Evening"] as const;
 type TimeOption = (typeof TIME_OPTIONS)[number];
 
 interface AddActivityModalProps {
   visible: boolean;
   onClose: () => void;
   onAdd: (input: ManualStopInput) => void;
+  defaultTimeLabel?: string;
 }
 
 export default function AddActivityModal({
   visible,
   onClose,
   onAdd,
+  defaultTimeLabel,
 }: AddActivityModalProps) {
   const [name, setName] = useState("");
   const [address, setAddress] = useState("");
   const [timeLabel, setTimeLabel] = useState<TimeOption | "">("");
   const [duration, setDuration] = useState("");
+
+  // Pre-select the time slot when opened from a specific section
+  useEffect(() => {
+    if (visible && defaultTimeLabel) {
+      const match = TIME_OPTIONS.find(
+        (o) => o.toLowerCase() === defaultTimeLabel.toLowerCase()
+      );
+      setTimeLabel(match ?? "");
+    }
+  }, [visible, defaultTimeLabel]);
 
   const handleAdd = () => {
     if (!name.trim()) return;

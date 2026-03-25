@@ -19,6 +19,7 @@ interface ActivityCardProps {
   drag?: () => void;
   isActive?: boolean;
   onRemove?: (id: string) => void;
+  onEditTime?: (id: string) => void;
 }
 
 function googleMapsSearchUrl(query: string) {
@@ -47,6 +48,7 @@ export default function ActivityCard({
   drag,
   isActive,
   onRemove,
+  onEditTime,
 }: ActivityCardProps) {
   const hasDescription = !!activity.description?.trim();
 
@@ -96,9 +98,15 @@ export default function ActivityCard({
           <Text className="text-base font-bold text-zinc-900 flex-1 mr-2" numberOfLines={1}>
             {activity.title}
           </Text>
-          <Text className="text-xs font-semibold text-violet-500">
-            {activity.time}
-          </Text>
+          <TouchableOpacity
+            onPress={onEditTime ? () => onEditTime(activity.id) : undefined}
+            disabled={!onEditTime}
+            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+          >
+            <Text className={`text-xs font-semibold ${onEditTime ? "text-violet-500 underline" : "text-violet-500"}`}>
+              {activity.time || "Set time"}
+            </Text>
+          </TouchableOpacity>
         </View>
 
         {/* Address */}
