@@ -1,15 +1,17 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Image, ImageSourcePropType, Pressable, Text, View } from "react-native";
 
 type Props = {
-  imageSource: ImageSourcePropType;
+  imageSource?: ImageSourcePropType;
   city: string;
   dateRange: string;
   onPress?: () => void;
   onChangeImage?: (uri: string) => Promise<void> | void;
 };
+
+const localFallback = { uri: "https://picsum.photos/800/500" };
 
 export function UpcomingTripCard({
   imageSource,
@@ -18,11 +20,20 @@ export function UpcomingTripCard({
   onPress,
   onChangeImage,
 }: Props) {
-  const [image, setImage] = useState(imageSource);
+  const unsplashStyleFallback = useMemo(
+    () => ({
+      uri: `https://picsum.photos/seed/${encodeURIComponent(city)}/800/500`,
+    }),
+    [city]
+  );
+
+  const [image, setImage] = useState<ImageSourcePropType>(
+    imageSource || unsplashStyleFallback
+  );
 
   useEffect(() => {
-    setImage(imageSource);
-  }, [imageSource]);
+    setImage(imageSource || unsplashStyleFallback);
+  }, [imageSource, unsplashStyleFallback]);
 
   const pickImage = async () => {
     const permissionResult =
@@ -42,9 +53,8 @@ export function UpcomingTripCard({
 
     if (!result.canceled) {
       const uri = result.assets[0].uri;
-
-      setImage({ uri }); // instant local preview
-      await onChangeImage?.(uri); // let parent save to Firebase
+      setImage({ uri });
+      await onChangeImage?.(uri);
     }
   };
 
@@ -66,6 +76,7 @@ export function UpcomingTripCard({
           className="w-full"
           style={{ height: 192 }}
           resizeMode="cover"
+          onError={() => setImage(localFallback)}
         />
 
         <Pressable
