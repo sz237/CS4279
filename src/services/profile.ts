@@ -203,8 +203,8 @@ export function getFakeFollowing(): FollowListItem[] {
     },
     {
       uid: "demo-following-3",
-      username: "shzeng",
-      displayName: "Sarah Zeng",
+      username: "rlu",
+      displayName: "Rosalyn Lu",
       photoURL: "https://i.insider.com/5df14d0ee94e860668396b82?width=700",
     },
     {
@@ -228,8 +228,8 @@ export function getFakeFollowers(): FollowListItem[] {
   return [
     {
       uid: "demo-follower-1",
-      username: "shzeng",
-      displayName: "Sarah Zeng",
+      username: "rlu",
+      displayName: "Rosalyn Lu",
       photoURL: "https://i.insider.com/5df14d0ee94e860668396b82?width=700",
     },
     {
