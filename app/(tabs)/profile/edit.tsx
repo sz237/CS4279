@@ -1,20 +1,23 @@
+import { ChangeAvatarButton } from "@/components/profile/ChangeAvatar";
 import { auth } from "@/src/config/firebase";
 import {
-    getCurrentUserProfile,
-    updateCurrentUserProfile,
+  getCurrentUserProfile,
+  updateCurrentUserProfile,
 } from "@/src/services/profile";
+import { UI } from "@/src/theme/ui";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
-    Alert,
-    Image,
-    ScrollView,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  Alert,
+  Image,
+  ScrollView,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 function initialsFromName(name: string) {
   const parts = name.trim().split(/\s+/);
@@ -25,9 +28,11 @@ function initialsFromName(name: string) {
 
 export default function EditProfileScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   const [displayName, setDisplayName] = useState("");
   const [username, setUsername] = useState("");
+  const [bio, setBio] = useState("");
   const [photoURL, setPhotoURL] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -36,6 +41,7 @@ export default function EditProfileScreen() {
       const profile = await getCurrentUserProfile();
       setDisplayName(profile?.displayName ?? auth.currentUser?.displayName ?? "");
       setUsername(profile?.username ?? "");
+      setBio(profile?.bio ?? "");
       setPhotoURL(profile?.photoURL ?? auth.currentUser?.photoURL ?? "");
     })();
   }, []);
@@ -46,6 +52,7 @@ export default function EditProfileScreen() {
       await updateCurrentUserProfile({
         displayName,
         username,
+        bio,
         photoURL: photoURL || null,
       });
       Alert.alert("Saved", "Your profile was updated.");
@@ -60,72 +67,204 @@ export default function EditProfileScreen() {
   const initials = initialsFromName(displayName || "U");
 
   return (
-    <ScrollView className="flex-1 bg-gray-50" contentContainerStyle={{ padding: 20 }}>
-      <View className="items-center">
+    <ScrollView
+      className="flex-1"
+      style={{ backgroundColor: UI.colors.pageBg }}
+      contentContainerStyle={{
+        paddingHorizontal: 20,
+        paddingTop: insets.top - 44,
+        paddingBottom: 24,
+      }}
+      showsVerticalScrollIndicator={false}
+    >
+      <Text
+        style={{
+          fontSize: UI.type.pageTitle,
+          fontWeight: "800",
+          color: UI.colors.textPrimary,
+          marginBottom: 20,
+        }}
+      >
+        Edit Profile
+      </Text>
+
+      <View
+        style={{
+          backgroundColor: UI.colors.cardBg,
+          borderColor: UI.colors.cardBorder,
+          borderWidth: 1,
+          borderRadius: UI.radius.card,
+          padding: 20,
+          alignItems: "center",
+          marginBottom: 16,
+          ...UI.shadow.card,
+        }}
+      >
         {photoURL ? (
           <Image
             source={{ uri: photoURL }}
             style={{ width: 110, height: 110, borderRadius: 55 }}
           />
         ) : (
-          <View className="h-[110px] w-[110px] items-center justify-center rounded-full bg-indigo-100">
-            <Text className="text-3xl font-semibold text-indigo-600">{initials}</Text>
+          <View
+            style={{
+              width: 110,
+              height: 110,
+              borderRadius: 55,
+              alignItems: "center",
+              justifyContent: "center",
+              backgroundColor: "#E0E7FF",
+            }}
+          >
+            <Text style={{ fontSize: 30, fontWeight: "600", color: UI.colors.brand }}>
+              {initials}
+            </Text>
           </View>
         )}
+
+        <View style={{ marginTop: 12 }}>
+          <ChangeAvatarButton onUpdated={setPhotoURL} />
+        </View>
       </View>
 
-      <View className="mt-6 gap-4">
-        <View>
-          <Text className="mb-2 text-base font-semibold text-gray-900">Name</Text>
-          <TextInput
-            value={displayName}
-            onChangeText={setDisplayName}
-            placeholder="Your name"
-            className="rounded-2xl border border-gray-200 bg-white px-4 py-4 text-base"
-          />
-        </View>
+      <View
+        style={{
+          backgroundColor: UI.colors.cardBg,
+          borderColor: UI.colors.cardBorder,
+          borderWidth: 1,
+          borderRadius: UI.radius.card,
+          padding: 16,
+          ...UI.shadow.card,
+        }}
+      >
+        <View style={{ gap: 16 }}>
+          <View>
+            <Text
+              style={{
+                marginBottom: 8,
+                fontSize: UI.type.body,
+                fontWeight: "700",
+                color: UI.colors.textPrimary,
+              }}
+            >
+              Name
+            </Text>
+            <TextInput
+              value={displayName}
+              onChangeText={setDisplayName}
+              placeholder="Your name"
+              placeholderTextColor={UI.colors.textMuted}
+              style={{
+                borderWidth: 1,
+                borderColor: UI.colors.cardBorder,
+                borderRadius: UI.radius.button,
+                backgroundColor: UI.colors.cardBg,
+                paddingHorizontal: 16,
+                paddingVertical: 14,
+                fontSize: 16,
+                color: UI.colors.textPrimary,
+              }}
+            />
+          </View>
 
-        <View>
-          <Text className="mb-2 text-base font-semibold text-gray-900">Username</Text>
-          <TextInput
-            value={username}
-            onChangeText={(text) => setUsername(text.toLowerCase().replace(/^@+/, ""))}
-            placeholder="username"
-            autoCapitalize="none"
-            className="rounded-2xl border border-gray-200 bg-white px-4 py-4 text-base"
-          />
-          <Text className="mt-1 text-sm text-slate-500">
-            Unique string of characters.
-          </Text>
-        </View>
+          <View>
+            <Text
+              style={{
+                marginBottom: 8,
+                fontSize: UI.type.body,
+                fontWeight: "700",
+                color: UI.colors.textPrimary,
+              }}
+            >
+              Username
+            </Text>
+            <TextInput
+              value={username}
+              onChangeText={(text) => setUsername(text.toLowerCase().replace(/^@+/, ""))}
+              placeholder="username"
+              placeholderTextColor={UI.colors.textMuted}
+              autoCapitalize="none"
+              style={{
+                borderWidth: 1,
+                borderColor: UI.colors.cardBorder,
+                borderRadius: UI.radius.button,
+                backgroundColor: UI.colors.cardBg,
+                paddingHorizontal: 16,
+                paddingVertical: 14,
+                fontSize: 16,
+                color: UI.colors.textPrimary,
+              }}
+            />
+            <Text
+              style={{
+                marginTop: 6,
+                fontSize: 13,
+                color: UI.colors.textSecondary,
+              }}
+            >
+              Unique string of characters.
+            </Text>
+          </View>
 
-        <View>
-          <Text className="mb-2 text-base font-semibold text-gray-900">
-            Profile image URL
-          </Text>
-          <TextInput
-            value={photoURL}
-            onChangeText={setPhotoURL}
-            placeholder="https://..."
-            autoCapitalize="none"
-            className="rounded-2xl border border-gray-200 bg-white px-4 py-4 text-base"
-          />
-          <Text className="mt-1 text-sm text-slate-500">
-            Firebase Storage TBA.
-          </Text>
-        </View>
+          <View>
+            <Text
+              style={{
+                marginBottom: 8,
+                fontSize: UI.type.body,
+                fontWeight: "700",
+                color: UI.colors.textPrimary,
+              }}
+            >
+              Bio
+            </Text>
+            <TextInput
+              value={bio}
+              onChangeText={setBio}
+              placeholder="Tell people a little about yourself"
+              placeholderTextColor={UI.colors.textMuted}
+              multiline
+              textAlignVertical="top"
+              style={{
+                minHeight: 110,
+                borderWidth: 1,
+                borderColor: UI.colors.cardBorder,
+                borderRadius: UI.radius.button,
+                backgroundColor: UI.colors.cardBg,
+                paddingHorizontal: 16,
+                paddingVertical: 14,
+                fontSize: 16,
+                color: UI.colors.textPrimary,
+              }}
+            />
+          </View>
 
-        <TouchableOpacity
-          onPress={handleSave}
-          disabled={saving}
-          activeOpacity={0.85}
-          className="mt-2 flex-row items-center justify-center rounded-2xl bg-gray-900 py-4"
-        >
-          <Ionicons name="save-outline" size={18} color="#FFFFFF" />
-          <Text className="ml-2 text-base font-semibold text-white">
-            {saving ? "Saving..." : "Save Changes"}
-          </Text>
-        </TouchableOpacity>
+          <TouchableOpacity
+            onPress={handleSave}
+            disabled={saving}
+            activeOpacity={0.85}
+            style={{
+              marginTop: 4,
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "center",
+              borderRadius: UI.radius.button,
+              backgroundColor: UI.colors.textPrimary,
+              paddingVertical: 14,
+            }}
+          >
+            <Ionicons name="save-outline" size={18} color="#FFFFFF" />
+            <Text
+              style={{
+                marginLeft: 8,
+                fontSize: 16,
+                fontWeight: "600",
+                color: "#FFFFFF",
+              }}
+            >
+              {saving ? "Saving..." : "Save Changes"}
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
     </ScrollView>
   );

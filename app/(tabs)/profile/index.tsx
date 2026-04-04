@@ -191,6 +191,7 @@ export default function ProfileScreen() {
   const [following, setFollowing] = useState<any[]>([]);
   const [followers, setFollowers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [localPhotoURL, setLocalPhotoURL] = useState<string | null>(null);
 
   const loadProfile = useCallback(async () => {
     try {
@@ -210,6 +211,8 @@ export default function ProfileScreen() {
         setFollowing([]);
         setFollowers([]);
       }
+
+      setLocalPhotoURL(p?.photoURL ?? auth.currentUser?.photoURL ?? null);
     } catch (error: any) {
       Alert.alert("Profile Error", error?.message ?? "Could not load profile.");
     } finally {
@@ -234,7 +237,8 @@ export default function ProfileScreen() {
   const displayName = profile?.displayName || auth.currentUser?.displayName || "Your Name";
   const username = profile?.username ? `@${profile.username}` : "@username";
   const email = profile?.email || auth.currentUser?.email || "No email listed";
-  const photoURL = profile?.photoURL || auth.currentUser?.photoURL || null;
+  const bio = profile?.bio?.trim() || "No bio added yet.";
+  const photoURL = localPhotoURL;
 
   const followingForUI = useMemo(() => getFollowingForUI(following), [following]);
   const followersForUI = useMemo(() => getFollowersForUI(followers), [followers]);
@@ -263,58 +267,69 @@ export default function ProfileScreen() {
         </Text>
 
         <Card style={{ marginBottom: 12 }}>
-          <View style={{ flexDirection: "row", alignItems: "center" }}>
-            <Avatar name={displayName} photoURL={photoURL} size={96} />
-            <View style={{ marginLeft: 16, flex: 1 }}>
-              <Text
-                style={{
-                  fontSize: 30,
-                  fontWeight: "600",
-                  color: UI.colors.textPrimary,
-                }}
-              >
-                {displayName}
-              </Text>
-              <Text
-                style={{
-                  marginTop: 4,
-                  fontSize: UI.type.body,
-                  color: UI.colors.textSecondary,
-                }}
-              >
-                {username}
-              </Text>
-              <Text
-                style={{
-                  marginTop: 4,
-                  fontSize: UI.type.body,
-                  color: UI.colors.textSecondary,
-                }}
-              >
-                {email}
-              </Text>
+          <View style={{ position: "relative" }}>
+            
+            {/* Edit icon */}
+            <Pressable
+              onPress={() => router.push("/(tabs)/profile/edit")}
+              style={{
+                position: "absolute",
+                top: 0,
+                right: 0,
+                zIndex: 10,
+                padding: 6,
+                borderRadius: 999,
+                backgroundColor: UI.colors.cardBg,
+              }}
+            >
+              <Ionicons name="create-outline" size={18} color={UI.colors.textMuted} />
+            </Pressable>
 
-              <Pressable
-                onPress={() => router.push("/(tabs)/profile/edit")}
-                style={{
-                  marginTop: 12,
-                  alignSelf: "flex-start",
-                  borderRadius: UI.radius.pill,
-                  backgroundColor: UI.colors.brandSoft,
-                  paddingHorizontal: 16,
-                  paddingVertical: 8,
-                }}
-              >
+            <View style={{ flexDirection: "row", alignItems: "flex-start" }}>
+              <Avatar name={displayName} photoURL={photoURL} size={96} />
+
+              <View style={{ marginLeft: 16, flex: 1 }}>
                 <Text
                   style={{
-                    fontSize: UI.type.body,
-                    fontWeight: "500",
-                    color: UI.colors.brand,
+                    fontSize: 30,
+                    fontWeight: "600",
+                    color: UI.colors.textPrimary,
                   }}
                 >
-                  Edit Profile
+                  {displayName}
                 </Text>
-              </Pressable>
+
+                <Text
+                  style={{
+                    marginTop: 4,
+                    fontSize: UI.type.body,
+                    color: UI.colors.textSecondary,
+                  }}
+                >
+                  {username}
+                </Text>
+
+                <Text
+                  style={{
+                    marginTop: 4,
+                    fontSize: UI.type.body,
+                    color: UI.colors.textSecondary,
+                  }}
+                >
+                  {email}
+                </Text>
+
+                <Text
+                  style={{
+                    marginTop: 10,
+                    fontSize: UI.type.body,
+                    lineHeight: 20,
+                    color: UI.colors.textPrimary,
+                  }}
+                >
+                  {bio}
+                </Text>
+              </View>
             </View>
           </View>
         </Card>
