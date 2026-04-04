@@ -2,13 +2,13 @@ import { auth, db } from "@/src/config/firebase";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { updateProfile as updateAuthProfile } from "firebase/auth";
 import {
-    collection,
-    doc,
-    getDoc,
-    getDocs,
-    query,
-    where,
-    writeBatch,
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  query,
+  where,
+  writeBatch,
 } from "firebase/firestore";
 
 export type ProfileUser = {
@@ -17,6 +17,7 @@ export type ProfileUser = {
   username: string;
   displayName: string;
   photoURL: string | null;
+  photoPath: string | null;
   bio: string | null;
 };
 
@@ -37,12 +38,19 @@ export type ItineraryDoc = {
   radiusMiles: number | null;
   interests: string[];
   stops: string[];
+  imageUrl?: string | null;
+  imagePath?: string | null;
+  coverImageUrl?: string | null;
   memberUids: string[];
   memberUsernames: string[];
-  roleByUid: Record<string, "owner" | "editor">;
+  roleByUid?: Record<string, "owner" | "editor">;
   createdAt?: any;
   updatedAt?: any;
   stopCount?: number;
+  inviteCode?: string;
+  status?: "current" | "upcoming" | "past";
+  accommodation?: { name: string; address: string } | null;
+  notes?: string | null;
 };
 
 export type LocalTripMeta = {
@@ -70,17 +78,20 @@ export async function getCurrentUserProfile(): Promise<ProfileUser | null> {
       username: "",
       displayName: current.displayName ?? "",
       photoURL: current.photoURL ?? null,
+      photoPath: null,
       bio: null,
     };
   }
 
   const data = snap.data() as Partial<ProfileUser>;
+
   return {
     uid: data.uid ?? current.uid,
     email: data.email ?? current.email ?? "",
     username: data.username ?? "",
     displayName: data.displayName ?? current.displayName ?? "",
     photoURL: data.photoURL ?? current.photoURL ?? null,
+    photoPath: data.photoPath ?? null,
     bio: data.bio ?? null,
   };
 }
@@ -88,6 +99,7 @@ export async function getCurrentUserProfile(): Promise<ProfileUser | null> {
 export async function updateCurrentUserProfile(params: {
   displayName: string;
   username: string;
+  bio: string;
   photoURL: string | null;
 }) {
   const current = auth.currentUser;
@@ -95,6 +107,7 @@ export async function updateCurrentUserProfile(params: {
 
   const displayName = params.displayName.trim();
   const username = normalizeUsername(params.username);
+  const bio = params.bio.trim() || null;
   const photoURL = params.photoURL?.trim() ? params.photoURL.trim() : null;
 
   if (!displayName) throw new Error("Display name is required.");
@@ -126,7 +139,8 @@ export async function updateCurrentUserProfile(params: {
         username,
         displayName,
         photoURL,
-        bio: existing?.bio ?? null,
+        photoPath: existing?.photoPath ?? null,
+        bio,
       },
       { merge: true }
     );
@@ -139,20 +153,21 @@ export async function updateCurrentUserProfile(params: {
 
     await batch.commit();
   } else {
-    await writeBatch(db)
-      .set(
-        userRef,
-        {
-          uid: current.uid,
-          email: existing?.email ?? current.email ?? "",
-          username,
-          displayName,
-          photoURL,
-          bio: existing?.bio ?? null,
-        },
-        { merge: true }
-      )
-      .commit();
+    const batch = writeBatch(db);
+    batch.set(
+      userRef,
+      {
+        uid: current.uid,
+        email: existing?.email ?? current.email ?? "",
+        username,
+        displayName,
+        photoURL,
+        photoPath: existing?.photoPath ?? null,
+        bio,
+      },
+      { merge: true }
+    );
+    await batch.commit();
   }
 
   await updateAuthProfile(current, {
@@ -203,14 +218,14 @@ export function getFakeFollowing(): FollowListItem[] {
     },
     {
       uid: "demo-following-3",
-      username: "rlu",
-      displayName: "Rosalyn Lu",
+      username: "shzeng",
+      displayName: "Sarah Zeng",
       photoURL: "https://i.insider.com/5df14d0ee94e860668396b82?width=700",
     },
     {
       uid: "demo-following-4",
       username: "tvtruong",
-      displayName: "Trieu Truong",
+      displayName: "Trieu Vy Truong",
       photoURL:
         "https://images.unsplash.com/photo-1543852786-1cf6624b9987?fm=jpg&q=60&w=3000&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8Mnx8Y2F0c3xlbnwwfHwwfHx8MA%3D%3D",
     },
@@ -228,14 +243,14 @@ export function getFakeFollowers(): FollowListItem[] {
   return [
     {
       uid: "demo-follower-1",
-      username: "rlu",
-      displayName: "Rosalyn Lu",
+      username: "shzeng",
+      displayName: "Sarah Zeng",
       photoURL: "https://i.insider.com/5df14d0ee94e860668396b82?width=700",
     },
     {
       uid: "demo-follower-2",
       username: "tvtruong",
-      displayName: "Trieu Truong",
+      displayName: "Trieu Vy Truong",
       photoURL:
         "https://images.unsplash.com/photo-1543852786-1cf6624b9987?fm=jpg&q=60&w=3000&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8Mnx8Y2F0c3xlbnwwfHwwfHx8MA%3D%3D",
     },
@@ -249,13 +264,12 @@ export function getFakeFollowers(): FollowListItem[] {
   ];
 }
 
-// ---------- NEW: use fake lists directly for UI right now ----------
-export function getFollowingForUI(_firestoreItems?: FollowListItem[]) {
-  return getFakeFollowing();
+export function getFollowingForUI(realFollowing: FollowListItem[]) {
+  return realFollowing.length > 0 ? realFollowing : getFakeFollowing();
 }
 
-export function getFollowersForUI(_firestoreItems?: FollowListItem[]) {
-  return getFakeFollowers();
+export function getFollowersForUI(realFollowers: FollowListItem[]) {
+  return realFollowers.length > 0 ? realFollowers : getFakeFollowers();
 }
 
 export async function getOwnedItineraries(uid: string): Promise<ItineraryDoc[]> {
@@ -310,7 +324,6 @@ export async function deleteTripMetaMany(itineraryIds: string[]) {
   await AsyncStorage.setItem(TRIP_META_KEY, JSON.stringify(map));
 }
 
-// ---------- NEW: auto-generate shareable trip link ----------
 export function generateTripShareLink(itineraryId: string) {
-  return `https://nomad.app/trip/${encodeURIComponent(itineraryId)}`;
+  return `https://nomad.app/trip/${itineraryId}`;
 }

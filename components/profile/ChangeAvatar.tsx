@@ -1,6 +1,4 @@
-import { auth } from "@/src/config/firebase";
-import { pickProcessAndUploadAvatar } from "@/src/services/avatars";
-import { updateCurrentUserPhotoURL } from "@/src/services/avatarURLs";
+import { updateCurrentUserAvatarFromPicker } from "@/src/services/avatarURLs";
 import { Ionicons } from "@expo/vector-icons";
 import { useState } from "react";
 import { Alert, Text, TouchableOpacity } from "react-native";
@@ -14,25 +12,18 @@ export function ChangeAvatarButton({ onUpdated }: Props) {
 
   const handleChangeAvatar = async () => {
     try {
-      const uid = auth.currentUser?.uid;
-      if (!uid) {
-        Alert.alert("Not signed in", "You must be signed in to update your avatar.");
-        return;
-      }
-
       setLoading(true);
 
-      const publicUrl = await pickProcessAndUploadAvatar(uid);
-      if (!publicUrl) {
-        return; // user canceled
-      }
+      const publicUrl = await updateCurrentUserAvatarFromPicker();
+      if (!publicUrl) return;
 
-      await updateCurrentUserPhotoURL(publicUrl);
       onUpdated?.(publicUrl);
-
       Alert.alert("Success", "Your profile photo has been updated.");
     } catch (error: any) {
-      Alert.alert("Upload failed", error?.message ?? "Could not update avatar.");
+      Alert.alert(
+        "Upload failed",
+        error?.message ?? "Could not update avatar."
+      );
     } finally {
       setLoading(false);
     }

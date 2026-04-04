@@ -6,8 +6,10 @@ import {
   type PlaceV1,
 } from "@/src/googlePlaces";
 import type { ItineraryModel, ItineraryStatus, StopModel } from "@/src/models";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import * as ImagePicker from "expo-image-picker";
+import {
+  deleteSupabaseTripCover,
+  pickProcessAndUploadTripCover,
+} from "@/src/services/tripCovers";
 import {
   arrayUnion,
   collection,
@@ -23,43 +25,6 @@ import {
   where,
   writeBatch,
 } from "firebase/firestore";
-
-const LOCAL_TRIP_COVER_KEY = "nomad_local_trip_covers_v1";
-
-// ─── Local cover override helpers ─────────────────────────────────────────────
-
-async function getLocalTripCoverMap(): Promise<Record<string, string>> {
-  const raw = await AsyncStorage.getItem(LOCAL_TRIP_COVER_KEY);
-  if (!raw) return {};
-  try {
-    return JSON.parse(raw) as Record<string, string>;
-  } catch {
-    return {};
-  }
-}
-
-async function setLocalTripCoverUri(tripId: string, uri: string) {
-  const map = await getLocalTripCoverMap();
-  map[tripId] = uri;
-  await AsyncStorage.setItem(LOCAL_TRIP_COVER_KEY, JSON.stringify(map));
-}
-
-export async function getLocalTripCoverUri(tripId: string): Promise<string | null> {
-  const map = await getLocalTripCoverMap();
-  return map[tripId] ?? null;
-}
-
-export async function getTripPreviewImageUri(
-  trip: Pick<ItineraryModel, "id" | "cityOrArea" | "coverImageUrl">
-): Promise<string | null> {
-  const localUri = await getLocalTripCoverUri(trip.id);
-  if (localUri) return localUri;
-
-  if (trip.coverImageUrl) return trip.coverImageUrl;
-
-  const backfilled = await ensureTripCoverImage(trip);
-  return backfilled;
-}
 
 // ─── Itineraries ──────────────────────────────────────────────────────────────
 
@@ -149,35 +114,60 @@ export async function ensureTripCoverImage(
 }
 
 /**
- * Change the cover image by selecting from the device photo library.
- * This stores a local URI override in AsyncStorage for now.
+ * Returns the best preview image for a trip:
+ * user-uploaded Supabase imageUrl
+ * Google Images coverImageUrl
+ * backfill coverImageUrl if missing
  */
-export async function changeTripCoverPhoto(
-  trip: Pick<ItineraryModel, "id" | "cityOrArea" | "coverImageUrl">
+export async function getTripPreviewImageUri(
+  trip: Pick<ItineraryModel, "id" | "cityOrArea" | "coverImageUrl" | "imageUrl">
 ): Promise<string | null> {
-  const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+  if (trip.imageUrl) return trip.imageUrl;
+  if (trip.coverImageUrl) return trip.coverImageUrl;
 
-  if (!permission.granted) {
-    throw new Error("Photo library permission is required to choose a cover image.");
-  }
-
-  const result = await ImagePicker.launchImageLibraryAsync({
-    mediaTypes: ImagePicker.MediaTypeOptions.Images,
-    allowsEditing: true,
-    quality: 0.9,
+  const backfilled = await ensureTripCoverImage({
+    id: trip.id,
+    cityOrArea: trip.cityOrArea,
+    coverImageUrl: trip.coverImageUrl ?? null,
   });
 
-  if (result.canceled || !result.assets?.length) {
+  return backfilled;
+}
+
+/**
+ * Change the trip cover by selecting from the device photo library,
+ * uploading to Supabase Storage, and saving the public URL to Firestore.
+ */
+export async function changeTripCoverPhoto(
+  trip: Pick<ItineraryModel, "id" | "cityOrArea" | "coverImageUrl" | "imageUrl" | "imagePath">
+): Promise<string | null> {
+  const uid = auth.currentUser?.uid;
+  if (!uid) {
+    throw new Error("You must be signed in to update a trip cover.");
+  }
+
+  const existingTrip = await getItinerary(trip.id);
+  const oldImagePath = existingTrip?.imagePath ?? null;
+
+  const uploaded = await pickProcessAndUploadTripCover(uid, trip.id);
+  if (!uploaded) {
     return await getTripPreviewImageUri(trip);
   }
 
-  const pickedUri = result.assets[0]?.uri;
-  if (!pickedUri) {
-    return await getTripPreviewImageUri(trip);
+  await updateItinerary(trip.id, {
+    imageUrl: uploaded.publicUrl,
+    imagePath: uploaded.storagePath,
+  });
+
+  if (oldImagePath && oldImagePath !== uploaded.storagePath) {
+    try {
+      await deleteSupabaseTripCover(oldImagePath);
+    } catch {
+      // non-fatal
+    }
   }
 
-  await setLocalTripCoverUri(trip.id, pickedUri);
-  return pickedUri;
+  return uploaded.publicUrl;
 }
 
 // ─── Joining ──────────────────────────────────────────────────────────────────
@@ -366,7 +356,6 @@ export async function saveAiItinerary(
   const itineraryId = doc(collection(db, "itineraries")).id;
   const now = new Date().toISOString();
 
-  // Flatten all activities to build the ordered stop list
   const allActivities = aiDays.flatMap((day) =>
     day.activities.map((act) => ({ ...act, day: day.date }))
   );
@@ -385,6 +374,8 @@ export async function saveAiItinerary(
     radiusMiles: params.radiusMiles ?? null,
     interests: params.interests,
     stops: stopIds,
+    imageUrl: null,
+    imagePath: null,
     coverImageUrl,
     memberUids: [user.uid],
     memberUsernames: [user.displayName ?? user.email ?? ""],

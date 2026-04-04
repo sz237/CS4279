@@ -18,8 +18,11 @@ export interface ItineraryModel {
   
   stops: string[]; // ordered array of stopIds
 
-  // Cover image for Home / Past Trips preview cards
-  imageUrl?: string; // user-uploaded photo
+  // User-uploaded trip cover from Supabase
+  imageUrl: string | null;
+  imagePath: string | null;
+
+  // Default generated trip cover
   coverImageUrl: string | null;
 
   // Access control

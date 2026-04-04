@@ -75,17 +75,20 @@ export function TripPreviewCard({
   onChangeRating,
   onShareTrip,
 }: Props) {
-  const [coverUrl, setCoverUrl] = useState<string | null>(trip.coverImageUrl ?? null);
+  const [coverUrl, setCoverUrl] = useState<string | null>(
+    trip.imageUrl ?? trip.coverImageUrl ?? null
+  );
   const [changingPhoto, setChangingPhoto] = useState(false);
 
   const loadPreviewImage = useCallback(async () => {
     const uri = await getTripPreviewImageUri({
       id: trip.id,
       cityOrArea: trip.cityOrArea,
+      imageUrl: trip.imageUrl ?? null,
       coverImageUrl: trip.coverImageUrl ?? null,
     });
     setCoverUrl(uri);
-  }, [trip.id, trip.cityOrArea, trip.coverImageUrl]);
+  }, [trip.id, trip.cityOrArea, trip.imageUrl, trip.coverImageUrl]);
 
   useEffect(() => {
     loadPreviewImage();
@@ -100,18 +103,25 @@ export function TripPreviewCard({
   const handleChangePhoto = async () => {
     try {
       setChangingPhoto(true);
+
       const next = await changeTripCoverPhoto({
         id: trip.id,
         cityOrArea: trip.cityOrArea,
-        coverImageUrl: coverUrl,
+        imageUrl: trip.imageUrl ?? null,
+        imagePath: trip.imagePath ?? null,
+        coverImageUrl: trip.coverImageUrl ?? null,
       });
+
       if (next) {
         setCoverUrl(next);
       } else {
         await loadPreviewImage();
       }
     } catch (error: any) {
-      Alert.alert("Change Photo Failed", error?.message ?? "Could not update cover photo.");
+      Alert.alert(
+        "Change Photo Failed",
+        error?.message ?? "Could not update cover photo."
+      );
     } finally {
       setChangingPhoto(false);
     }
@@ -207,7 +217,10 @@ export function TripPreviewCard({
             </View>
 
             <TouchableOpacity
-              onPress={handleChangePhoto}
+              onPress={(e: any) => {
+                e?.stopPropagation?.();
+                handleChangePhoto();
+              }}
               activeOpacity={0.85}
               style={{
                 backgroundColor: UI.colors.overlayLight,
@@ -216,7 +229,13 @@ export function TripPreviewCard({
                 paddingVertical: 8,
               }}
             >
-              <Text style={{ fontSize: UI.type.body, fontWeight: "500", color: UI.colors.brand }}>
+              <Text
+                style={{
+                  fontSize: UI.type.body,
+                  fontWeight: "500",
+                  color: UI.colors.brand,
+                }}
+              >
                 {changingPhoto ? "Updating..." : "Change Photo"}
               </Text>
             </TouchableOpacity>
@@ -243,7 +262,10 @@ export function TripPreviewCard({
 
                 {onShareTrip ? (
                   <TouchableOpacity
-                    onPress={onShareTrip}
+                    onPress={(e: any) => {
+                      e?.stopPropagation?.();
+                      onShareTrip();
+                    }}
                     activeOpacity={0.85}
                     style={{
                       backgroundColor: "rgba(255,255,255,0.80)",

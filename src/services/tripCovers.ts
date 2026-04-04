@@ -2,28 +2,27 @@ import { supabase } from "@/src/config/supabase";
 import * as ImageManipulator from "expo-image-manipulator";
 import * as ImagePicker from "expo-image-picker";
 
-export type UploadedAvatarResult = {
+const TRIP_COVER_HEIGHT = 800;
+const TRIP_COVER_WIDTH = 1200;
+
+export type UploadedTripCoverResult = {
   publicUrl: string;
   storagePath: string;
 };
 
-export async function deleteSupabaseAvatar(storagePath: string | null | undefined) {
+export async function deleteSupabaseTripCover(storagePath: string | null | undefined) {
   if (!storagePath) return;
 
-  const { error } = await supabase.storage.from("avatars").remove([storagePath]);
+  const { error } = await supabase.storage.from("trip-covers").remove([storagePath]);
   if (error) {
     throw new Error(error.message);
   }
 }
 
-/**
- * Pick an avatar from the device photo library, crop it square,
- * resize/compress it to 400x400 JPEG, upload it to Supabase Storage,
- * and return both the public URL and storage path.
- */
-export async function pickProcessAndUploadAvatar(
-  uid: string
-): Promise<UploadedAvatarResult | null> {
+export async function pickProcessAndUploadTripCover(
+  uid: string,
+  tripId: string
+): Promise<UploadedTripCoverResult | null> {
   const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
   if (!permission.granted) {
     throw new Error("Photo library permission is required.");
@@ -32,7 +31,7 @@ export async function pickProcessAndUploadAvatar(
   const picked = await ImagePicker.launchImageLibraryAsync({
     mediaTypes: ["images"],
     allowsEditing: true,
-    aspect: [1, 1],
+    aspect: [3, 2],
     quality: 1,
   });
 
@@ -47,9 +46,9 @@ export async function pickProcessAndUploadAvatar(
 
   const manipulated = await ImageManipulator.manipulateAsync(
     asset.uri,
-    [{ resize: { width: 400, height: 400 } }],
+    [{ resize: { width: TRIP_COVER_WIDTH, height: TRIP_COVER_HEIGHT } }],
     {
-      compress: 0.8,
+      compress: 0.82,
       format: ImageManipulator.SaveFormat.JPEG,
     }
   );
@@ -58,10 +57,10 @@ export async function pickProcessAndUploadAvatar(
   const arrayBuffer = await response.arrayBuffer();
 
   const timestamp = Date.now();
-  const filePath = `public/${uid}/avatar-${timestamp}.jpg`;
+  const filePath = `public/${uid}/${tripId}/cover-${timestamp}.jpg`;
 
   const { error: uploadError } = await supabase.storage
-    .from("avatars")
+    .from("trip-covers")
     .upload(filePath, arrayBuffer, {
       contentType: "image/jpeg",
       upsert: false,
@@ -72,10 +71,10 @@ export async function pickProcessAndUploadAvatar(
     throw new Error(uploadError.message);
   }
 
-  const { data } = supabase.storage.from("avatars").getPublicUrl(filePath);
+  const { data } = supabase.storage.from("trip-covers").getPublicUrl(filePath);
 
   if (!data?.publicUrl) {
-    throw new Error("Could not generate public URL for avatar.");
+    throw new Error("Could not generate public URL for trip cover.");
   }
 
   return {

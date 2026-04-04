@@ -1,5 +1,4 @@
 import { SectionHeader } from "@/components/common/SectionHeader";
-import { ChangeAvatarButton } from "@/components/profile/AddAvatar";
 import { auth } from "@/src/config/firebase";
 import {
   ProfileUser,
@@ -25,7 +24,13 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-function Card({ children, style }: { children: React.ReactNode; style?: object }) {
+function Card({
+  children,
+  style,
+}: {
+  children: React.ReactNode;
+  style?: object;
+}) {
   return (
     <View
       style={{
@@ -65,10 +70,22 @@ function NavRow({
     >
       <Ionicons name={icon} size={22} color={UI.colors.textMuted} />
       <View style={{ marginLeft: 12, flex: 1 }}>
-        <Text style={{ fontSize: 18, fontWeight: "500", color: UI.colors.textPrimary }}>
+        <Text
+          style={{
+            fontSize: 18,
+            fontWeight: "500",
+            color: UI.colors.textPrimary,
+          }}
+        >
           {title}
         </Text>
-        <Text style={{ marginTop: 2, fontSize: UI.type.body, color: UI.colors.textSecondary }}>
+        <Text
+          style={{
+            marginTop: 2,
+            fontSize: UI.type.body,
+            color: UI.colors.textSecondary,
+          }}
+        >
           {subtitle}
         </Text>
       </View>
@@ -144,10 +161,22 @@ function StatPill({
         ...UI.shadow.card,
       }}
     >
-      <Text style={{ fontSize: 24, fontWeight: "700", color: UI.colors.textPrimary }}>
+      <Text
+        style={{
+          fontSize: 24,
+          fontWeight: "700",
+          color: UI.colors.textPrimary,
+        }}
+      >
         {value}
       </Text>
-      <Text style={{ marginTop: 4, fontSize: UI.type.body, color: UI.colors.textSecondary }}>
+      <Text
+        style={{
+          marginTop: 4,
+          fontSize: UI.type.body,
+          color: UI.colors.textSecondary,
+        }}
+      >
         {label}
       </Text>
     </Pressable>
@@ -162,8 +191,6 @@ export default function ProfileScreen() {
   const [following, setFollowing] = useState<any[]>([]);
   const [followers, setFollowers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-
-  // local avatar state
   const [localPhotoURL, setLocalPhotoURL] = useState<string | null>(null);
 
   const loadProfile = useCallback(async () => {
@@ -185,9 +212,7 @@ export default function ProfileScreen() {
         setFollowers([]);
       }
 
-      // sync avatar from Firestore
       setLocalPhotoURL(p?.photoURL ?? auth.currentUser?.photoURL ?? null);
-
     } catch (error: any) {
       Alert.alert("Profile Error", error?.message ?? "Could not load profile.");
     } finally {
@@ -195,7 +220,11 @@ export default function ProfileScreen() {
     }
   }, []);
 
-  useFocusEffect(useCallback(() => { loadProfile(); }, [loadProfile]));
+  useFocusEffect(
+    useCallback(() => {
+      loadProfile();
+    }, [loadProfile])
+  );
 
   const handleSignOut = async () => {
     try {
@@ -208,6 +237,8 @@ export default function ProfileScreen() {
   const displayName = profile?.displayName || auth.currentUser?.displayName || "Your Name";
   const username = profile?.username ? `@${profile.username}` : "@username";
   const email = profile?.email || auth.currentUser?.email || "No email listed";
+  const bio = profile?.bio?.trim() || "No bio added yet.";
+  const photoURL = localPhotoURL;
 
   const followingForUI = useMemo(() => getFollowingForUI(following), [following]);
   const followersForUI = useMemo(() => getFollowersForUI(followers), [followers]);
@@ -216,70 +247,93 @@ export default function ProfileScreen() {
     <View className="flex-1" style={{ backgroundColor: UI.colors.pageBg }}>
       <ScrollView
         className="flex-1"
+        style={{ backgroundColor: UI.colors.pageBg }}
         contentContainerStyle={{
           paddingHorizontal: 16,
           paddingTop: insets.top + 12,
           paddingBottom: UI.spacing.pageBottom,
         }}
+        showsVerticalScrollIndicator={false}
       >
-        <Text style={{
-          fontSize: UI.type.pageTitle,
-          fontWeight: "800",
-          color: UI.colors.textPrimary,
-          marginBottom: 16,
-        }}>
+        <Text
+          style={{
+            fontSize: UI.type.pageTitle,
+            fontWeight: "800",
+            color: UI.colors.textPrimary,
+            marginBottom: 16,
+          }}
+        >
           Profile
         </Text>
 
-        {/* PROFILE CARD */}
         <Card style={{ marginBottom: 12 }}>
-          <View style={{ flexDirection: "row", alignItems: "center" }}>
-            <View>
-              <Avatar name={displayName} photoURL={localPhotoURL} size={96} />
+          <View style={{ position: "relative" }}>
+            
+            {/* Edit icon */}
+            <Pressable
+              onPress={() => router.push("/(tabs)/profile/edit")}
+              style={{
+                position: "absolute",
+                top: 0,
+                right: 0,
+                zIndex: 10,
+                padding: 6,
+                borderRadius: 999,
+                backgroundColor: UI.colors.cardBg,
+              }}
+            >
+              <Ionicons name="create-outline" size={18} color={UI.colors.textMuted} />
+            </Pressable>
 
-              {/* ✅ NEW BUTTON */}
-              <View style={{ marginTop: 8 }}>
-                <ChangeAvatarButton onUpdated={setLocalPhotoURL} />
-              </View>
-            </View>
+            <View style={{ flexDirection: "row", alignItems: "flex-start" }}>
+              <Avatar name={displayName} photoURL={photoURL} size={96} />
 
-            <View style={{ marginLeft: 16, flex: 1 }}>
-              <Text style={{ fontSize: 30, fontWeight: "600", color: UI.colors.textPrimary }}>
-                {displayName}
-              </Text>
-
-              <Text style={{ marginTop: 4, fontSize: UI.type.body, color: UI.colors.textSecondary }}>
-                {username}
-              </Text>
-
-              <Text style={{ marginTop: 4, fontSize: UI.type.body, color: UI.colors.textSecondary }}>
-                {email}
-              </Text>
-
-              <Pressable
-                onPress={() => router.push("/(tabs)/profile/edit")}
-                style={{
-                  marginTop: 12,
-                  alignSelf: "flex-start",
-                  borderRadius: UI.radius.pill,
-                  backgroundColor: UI.colors.brandSoft,
-                  paddingHorizontal: 16,
-                  paddingVertical: 8,
-                }}
-              >
-                <Text style={{
-                  fontSize: UI.type.body,
-                  fontWeight: "500",
-                  color: UI.colors.brand,
-                }}>
-                  Edit Profile
+              <View style={{ marginLeft: 16, flex: 1 }}>
+                <Text
+                  style={{
+                    fontSize: 30,
+                    fontWeight: "600",
+                    color: UI.colors.textPrimary,
+                  }}
+                >
+                  {displayName}
                 </Text>
-              </Pressable>
+
+                <Text
+                  style={{
+                    marginTop: 4,
+                    fontSize: UI.type.body,
+                    color: UI.colors.textSecondary,
+                  }}
+                >
+                  {username}
+                </Text>
+
+                <Text
+                  style={{
+                    marginTop: 4,
+                    fontSize: UI.type.body,
+                    color: UI.colors.textSecondary,
+                  }}
+                >
+                  {email}
+                </Text>
+
+                <Text
+                  style={{
+                    marginTop: 10,
+                    fontSize: UI.type.body,
+                    lineHeight: 20,
+                    color: UI.colors.textPrimary,
+                  }}
+                >
+                  {bio}
+                </Text>
+              </View>
             </View>
           </View>
         </Card>
 
-        {/* FOLLOW STATS */}
         <View style={{ marginBottom: 16, flexDirection: "row", gap: 8 }}>
           <StatPill
             label="Following"
@@ -303,61 +357,88 @@ export default function ProfileScreen() {
           />
         </View>
 
-        {/* TRIPS */}
-        <SectionHeader title="Trips" />
-        <Card style={{ padding: 0 }}>
-          <View style={{ paddingHorizontal: 16 }}>
-            <NavRow
-              icon="briefcase-outline"
-              title="My Trips"
-              subtitle="View, rate, share, and delete itineraries"
-              onPress={() => router.push("/(tabs)/profile/my-trips")}
-            />
-          </View>
-        </Card>
+        <View style={{ marginBottom: 16 }}>
+          <SectionHeader title="Trips" />
+          <Card style={{ padding: 0 }}>
+            <View style={{ paddingHorizontal: 16 }}>
+              <NavRow
+                icon="briefcase-outline"
+                title="My Trips"
+                subtitle="View, rate, share, and delete itineraries"
+                onPress={() => router.push("/(tabs)/profile/my-trips")}
+              />
+            </View>
+          </Card>
+        </View>
 
-        {/* SETTINGS */}
-        <SectionHeader title="Settings" />
-        <Card style={{ padding: 0 }}>
-          <View style={{ paddingHorizontal: 16 }}>
-            <NavRow
-              icon="notifications-outline"
-              title="Push Notifications"
-              subtitle="Trip updates and activity"
-              onPress={() => router.push("/(tabs)/profile/notifications")}
-            />
-          </View>
-        </Card>
+        <View style={{ marginBottom: 16 }}>
+          <SectionHeader title="Settings" />
+          <Card style={{ padding: 0 }}>
+            <View style={{ paddingHorizontal: 16 }}>
+              <NavRow
+                icon="notifications-outline"
+                title="Push Notifications"
+                subtitle="Trip changes, followed users, and popular itineraries"
+                onPress={() => router.push("/(tabs)/profile/notifications")}
+              />
+            </View>
 
-        {/* ACCOUNT */}
-        <SectionHeader title="Account" />
-        <Card style={{ padding: 0 }}>
-          <Pressable
-            onPress={handleSignOut}
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              justifyContent: "center",
-              paddingVertical: 16,
-            }}
-          >
-            <Ionicons name="log-out-outline" size={22} color={UI.colors.danger} />
-            <Text style={{
-              marginLeft: 8,
-              fontSize: 18,
-              fontWeight: "500",
-              color: UI.colors.danger,
-            }}>
-              Log Out
-            </Text>
-          </Pressable>
-        </Card>
+            <View style={{ height: 1, backgroundColor: "#F3F4F6" }} />
 
-        {loading && (
+            <View style={{ paddingHorizontal: 16 }}>
+              <NavRow
+                icon="shield-checkmark-outline"
+                title="Privacy & Security"
+                subtitle="Read Firebase privacy and security information"
+                onPress={() => router.push("/(tabs)/profile/privacy")}
+              />
+            </View>
+
+            <View style={{ height: 1, backgroundColor: "#F3F4F6" }} />
+
+            <View style={{ paddingHorizontal: 16 }}>
+              <NavRow
+                icon="help-circle-outline"
+                title="Help & Support"
+                subtitle="Contact the Nomad team"
+                onPress={() => router.push("/(tabs)/profile/help")}
+              />
+            </View>
+          </Card>
+        </View>
+
+        <View style={{ marginBottom: 16 }}>
+          <SectionHeader title="Account" />
+          <Card style={{ padding: 0 }}>
+            <Pressable
+              onPress={handleSignOut}
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "center",
+                paddingVertical: 16,
+              }}
+            >
+              <Ionicons name="log-out-outline" size={22} color={UI.colors.danger} />
+              <Text
+                style={{
+                  marginLeft: 8,
+                  fontSize: 18,
+                  fontWeight: "500",
+                  color: UI.colors.danger,
+                }}
+              >
+                Log Out
+              </Text>
+            </Pressable>
+          </Card>
+        </View>
+
+        {loading ? (
           <Text style={{ fontSize: UI.type.body, color: UI.colors.textMuted }}>
             Loading profile…
           </Text>
-        )}
+        ) : null}
       </ScrollView>
     </View>
   );
