@@ -1,6 +1,14 @@
+import { useTrips } from "@/context/TripsContext";
+import { placeDetails, placesTextSearch } from "@/lib/googleplaces";
+import { db } from "@/src/config/firebase";
+import type { ItineraryModel, StopModel } from "@/src/models";
+import { deleteStop, saveStop } from "@/src/services/trips";
 import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
+import { collection, doc } from "firebase/firestore";
 import { useCallback, useMemo, useState } from "react";
 import {
+  Alert,
   FlatList,
   Modal,
   Pressable,
@@ -11,9 +19,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { placeDetails, placesTextSearch } from "@/lib/googleplaces";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { LinearGradient } from "expo-linear-gradient";
 
 type SearchResult = {
   id: string;
@@ -29,8 +35,15 @@ type ReviewSnippet = {
   text: string;
 };
 
+type AddedStop = {
+  itineraryId: string;
+  stopId: string;
+};
+
 export default function SearchScreen() {
   const insets = useSafeAreaInsets();
+  const { trips } = useTrips();
+
   const [location, setLocation] = useState("");
   const [activity, setActivity] = useState("");
   const [submittedQuery, setSubmittedQuery] = useState("");
@@ -42,9 +55,30 @@ export default function SearchScreen() {
   const [detailError, setDetailError] = useState("");
   const [selectedPlace, setSelectedPlace] = useState<SearchResult | null>(null);
   const [reviewSnippets, setReviewSnippets] = useState<ReviewSnippet[]>([]);
-  const [itineraryIds, setItineraryIds] = useState<string[]>([]);
+
+  // Tracks which places have been added and to which trip/stop
+  const [addedStops, setAddedStops] = useState<Record<string, AddedStop>>({});
+  // placeId currently being added or removed
+  const [addBusy, setAddBusy] = useState<string | null>(null);
+
+  // Trip picker popup state
+  const [tripPickerVisible, setTripPickerVisible] = useState(false);
+  const [pendingPlace, setPendingPlace] = useState<SearchResult | null>(null);
+  const [tripPickerOptions, setTripPickerOptions] = useState<ItineraryModel[]>([]);
 
   const canSearch = useMemo(() => location.trim().length > 0 && !busy, [location, busy]);
+
+  // Current or upcoming trips whose cityOrArea overlaps the searched location
+  const matchingUpcomingTrips = useMemo(() => {
+    const city = location.trim().toLowerCase();
+    if (!city) return [];
+    return trips.filter(
+      (trip) =>
+        (trip.status === "upcoming" || trip.status === "current") &&
+        (trip.cityOrArea.toLowerCase().includes(city) ||
+          city.includes(trip.cityOrArea.toLowerCase()))
+    );
+  }, [trips, location]);
 
   const runSearch = useCallback(async () => {
     const locationValue = location.trim();
@@ -115,9 +149,97 @@ export default function SearchScreen() {
     setDetailVisible(false);
   }, []);
 
-  const addToItinerary = useCallback((placeId: string) => {
-    setItineraryIds((prev) => (prev.includes(placeId) ? prev : [...prev, placeId]));
-  }, []);
+  const saveStopToTrip = useCallback(
+    async (place: SearchResult, itineraryId: string) => {
+      const stopId = doc(collection(db, "itineraries", itineraryId, "stops")).id;
+      const trip = trips.find((t) => t.id === itineraryId);
+      const stop: StopModel = {
+        id: stopId,
+        orderIndex: trip?.stopCount ?? 0,
+        day: null,
+        timeLabel: null,
+        duration: null,
+        placeId: place.id,
+        name: place.name,
+        address: place.address || "",
+        photoUrl: null,
+        lat: 0,
+        lng: 0,
+        rating: place.rating ?? null,
+        userRatingCount: place.reviewCount ?? null,
+        types: [],
+        briefSummary: null,
+        travelMode: null,
+        travelMinutes: null,
+        category: null,
+      };
+      await saveStop(itineraryId, stop);
+      setAddedStops((prev) => ({ ...prev, [place.id]: { itineraryId, stopId } }));
+    },
+    [trips]
+  );
+
+  const handleAddToItinerary = useCallback(
+    async (item: SearchResult) => {
+      if (matchingUpcomingTrips.length === 0) {
+        Alert.alert(
+          "No trips found",
+          `You don't have any current or upcoming trips to ${location.trim()}.`
+        );
+        return;
+      }
+
+      if (matchingUpcomingTrips.length === 1) {
+        setAddBusy(item.id);
+        try {
+          await saveStopToTrip(item, matchingUpcomingTrips[0].id);
+        } finally {
+          setAddBusy(null);
+        }
+        return;
+      }
+
+      // 2+ matching trips — show picker
+      setPendingPlace(item);
+      setTripPickerOptions(matchingUpcomingTrips);
+      setTripPickerVisible(true);
+    },
+    [matchingUpcomingTrips, saveStopToTrip, location]
+  );
+
+  const handleTripPicked = useCallback(
+    async (trip: ItineraryModel) => {
+      if (!pendingPlace) return;
+      setTripPickerVisible(false);
+      setAddBusy(pendingPlace.id);
+      try {
+        await saveStopToTrip(pendingPlace, trip.id);
+      } finally {
+        setAddBusy(null);
+        setPendingPlace(null);
+      }
+    },
+    [pendingPlace, saveStopToTrip]
+  );
+
+  const handleRemove = useCallback(
+    async (placeId: string) => {
+      const added = addedStops[placeId];
+      if (!added) return;
+      setAddBusy(placeId);
+      try {
+        await deleteStop(added.itineraryId, added.stopId);
+        setAddedStops((prev) => {
+          const next = { ...prev };
+          delete next[placeId];
+          return next;
+        });
+      } finally {
+        setAddBusy(null);
+      }
+    },
+    [addedStops]
+  );
 
   const fieldLabel = {
     fontSize: 10,
@@ -249,37 +371,51 @@ export default function SearchScreen() {
               <Text style={styles.resultsTitle}>Results for: {submittedQuery}</Text>
             ) : null
           }
-          renderItem={({ item }) => (
-            <View style={styles.resultCard}>
-              <Text style={styles.resultName}>{item.name}</Text>
-              {!!item.address && <Text style={styles.resultAddress}>{item.address}</Text>}
-              <View style={styles.metaRow}>
-                <Ionicons name="star" size={14} color="#F59E0B" />
-                <Text style={styles.metaText}>
-                  {item.rating ?? "—"} ({item.reviewCount ?? 0})
-                </Text>
-              </View>
-              <View style={styles.resultActions}>
-                <Pressable
-                  style={styles.viewReviewsButton}
-                  onPress={() => openResultDetails(item)}
-                >
-                  <Text style={styles.viewReviewsButtonText}>View Reviews</Text>
-                </Pressable>
-                <Pressable
-                  style={[
-                    styles.addToItineraryButton,
-                    itineraryIds.includes(item.id) && styles.addToItineraryButtonAdded,
-                  ]}
-                  onPress={() => addToItinerary(item.id)}
-                >
-                  <Text style={styles.addToItineraryButtonText}>
-                    {itineraryIds.includes(item.id) ? "Added" : "Add to Itinerary"}
+          renderItem={({ item }) => {
+            const isAdded = !!addedStops[item.id];
+            const isBusy = addBusy === item.id;
+            return (
+              <View style={styles.resultCard}>
+                <Text style={styles.resultName}>{item.name}</Text>
+                {!!item.address && <Text style={styles.resultAddress}>{item.address}</Text>}
+                <View style={styles.metaRow}>
+                  <Ionicons name="star" size={14} color="#F59E0B" />
+                  <Text style={styles.metaText}>
+                    {item.rating ?? "—"} ({item.reviewCount ?? 0})
                   </Text>
-                </Pressable>
+                </View>
+                <View style={styles.resultActions}>
+                  <Pressable
+                    style={styles.viewReviewsButton}
+                    onPress={() => openResultDetails(item)}
+                  >
+                    <Text style={styles.viewReviewsButtonText}>View Reviews</Text>
+                  </Pressable>
+                  {isAdded ? (
+                    <Pressable
+                      style={[styles.removeButton, isBusy && styles.buttonDisabled]}
+                      onPress={() => handleRemove(item.id)}
+                      disabled={isBusy}
+                    >
+                      <Text style={styles.removeButtonText}>
+                        {isBusy ? "Removing…" : "Remove"}
+                      </Text>
+                    </Pressable>
+                  ) : (
+                    <Pressable
+                      style={[styles.addToItineraryButton, isBusy && styles.buttonDisabled]}
+                      onPress={() => handleAddToItinerary(item)}
+                      disabled={isBusy}
+                    >
+                      <Text style={styles.addToItineraryButtonText}>
+                        {isBusy ? "Adding…" : "Add to Itinerary"}
+                      </Text>
+                    </Pressable>
+                  )}
+                </View>
               </View>
-            </View>
-          )}
+            );
+          }}
           ListEmptyComponent={
             <View style={styles.emptyState}>
               <Ionicons name="map-outline" size={48} color="#E5E7EB" />
@@ -292,6 +428,7 @@ export default function SearchScreen() {
         />
       </View>
 
+      {/* ── Reviews modal ── */}
       <Modal
         visible={detailVisible}
         transparent
@@ -340,6 +477,45 @@ export default function SearchScreen() {
                 </>
               )}
             </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── Trip picker modal ── */}
+      <Modal
+        visible={tripPickerVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setTripPickerVisible(false)}
+      >
+        <View style={styles.pickerBackdrop}>
+          <View style={styles.pickerCard}>
+            <View style={styles.pickerHeader}>
+              <Text style={styles.pickerTitle}>Add to which trip?</Text>
+              <Pressable onPress={() => setTripPickerVisible(false)} hitSlop={8}>
+                <Ionicons name="close" size={20} color="#6B7280" />
+              </Pressable>
+            </View>
+            {pendingPlace && (
+              <Text style={styles.pickerSubtitle} numberOfLines={1}>
+                {pendingPlace.name}
+              </Text>
+            )}
+            {tripPickerOptions.map((trip) => (
+              <Pressable
+                key={trip.id}
+                style={styles.pickerOption}
+                onPress={() => handleTripPicked(trip)}
+              >
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.pickerOptionTitle}>{trip.title}</Text>
+                  <Text style={styles.pickerOptionMeta}>
+                    {trip.startDate} – {trip.endDate}
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={16} color="#9CA3AF" />
+              </Pressable>
+            ))}
           </View>
         </View>
       </Modal>
@@ -420,13 +596,27 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
     alignItems: "center",
   },
-  addToItineraryButtonAdded: {
-    backgroundColor: "#374151",
-  },
   addToItineraryButtonText: {
     color: "#FFFFFF",
     fontSize: 13,
     fontWeight: "700",
+  },
+  removeButton: {
+    flex: 1,
+    backgroundColor: "#FEE2E2",
+    borderRadius: 10,
+    paddingVertical: 9,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#FECACA",
+  },
+  removeButtonText: {
+    color: "#B91C1C",
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  buttonDisabled: {
+    opacity: 0.5,
   },
   emptyState: {
     flex: 1,
@@ -520,5 +710,55 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#111827",
     lineHeight: 18,
+  },
+  // Trip picker
+  pickerBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(17, 24, 39, 0.45)",
+    justifyContent: "center",
+    paddingHorizontal: 32,
+  },
+  pickerCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 8,
+  },
+  pickerHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 4,
+  },
+  pickerTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#111827",
+  },
+  pickerSubtitle: {
+    fontSize: 13,
+    color: "#6B7280",
+    marginBottom: 12,
+  },
+  pickerOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderTopColor: "#F3F4F6",
+    gap: 8,
+  },
+  pickerOptionTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#111827",
+  },
+  pickerOptionMeta: {
+    fontSize: 12,
+    color: "#9CA3AF",
+    marginTop: 2,
   },
 });
