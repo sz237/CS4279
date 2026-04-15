@@ -1,3 +1,4 @@
+import { GroupInterestsCard } from "@/components/itinerary/GroupInterestsCard";
 import { MemberChip } from "@/components/itinerary/MemberChip";
 import { useTrips } from "@/context/TripsContext";
 import { useItinerarySheet } from "@/lib/ItinerarySheetContext";
@@ -111,6 +112,95 @@ export default function OverviewScreen() {
     await Share.share({ message: `Join my trip on Nomad! Use code: ${inviteCode}` });
   }
 
+  const memberInterestsByUid = trip?.memberInterestsByUid ?? {};
+
+// SHARED INTERESTS
+
+const memberRows = (trip?.memberUids ?? []).map((uid, index) => ({
+  uid,
+  username: trip?.memberUsernames?.[index] ?? "Unknown",
+  interests: memberInterestsByUid[uid] ?? [],
+}));
+
+const interestCounts = memberRows
+  .flatMap((m) => m.interests)
+  .reduce<Record<string, number>>((acc, interest) => {
+    const key = interest.trim().toLowerCase();
+    if (!key) return acc;
+    acc[key] = (acc[key] ?? 0) + 1;
+    return acc;
+  }, {});
+
+function makeInterestTagId(label: string): string {
+  return label
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, "")
+    .replace(/\s+/g, "-");
+}
+
+function formatInterestLabel(label: string): string {
+  return label
+    .trim()
+    .split(/\s+/)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
+
+async function handleAddInterest(rawLabel: string) {
+  if (!trip) return;
+
+  const uid = auth.currentUser?.uid;
+  if (!uid) {
+    Alert.alert("Error", "You must be signed in to add an interest.");
+    return;
+  }
+
+  const trimmed = rawLabel.trim();
+  if (!trimmed) return;
+
+  const id = makeInterestTagId(trimmed);
+  const now = new Date().toISOString();
+  const existingTags = trip.interestTags ?? [];
+
+  const existingIndex = existingTags.findIndex((tag) => tag.id === id);
+
+  let nextTags = [...existingTags];
+
+  if (existingIndex >= 0) {
+    const existing = nextTags[existingIndex];
+    const alreadyVoted = (existing.voterUids ?? []).includes(uid);
+
+    nextTags[existingIndex] = {
+      ...existing,
+      label: existing.label || formatInterestLabel(trimmed),
+      voterUids: alreadyVoted
+        ? existing.voterUids
+        : [...(existing.voterUids ?? []), uid],
+      updatedAt: now,
+    };
+  } else {
+    nextTags = [
+      ...nextTags,
+      {
+        id,
+        label: formatInterestLabel(trimmed),
+        voterUids: [uid],
+        createdAt: now,
+        updatedAt: now,
+      },
+    ];
+  }
+
+  try {
+    await updateItinerary(trip.id, {
+      interestTags: nextTags,
+    });
+  } catch (err: any) {
+    Alert.alert("Error", err?.message ?? "Could not add interest.");
+  }
+}
+
   return (
     <View style={{ flex: 1, backgroundColor: UI.colors.pageBg }}>
       <View
@@ -212,6 +302,12 @@ export default function OverviewScreen() {
               <MemberChip key={name} name={name} />
             ))}
           </View>
+
+          <GroupInterestsCard
+            interestTags={trip?.interestTags ?? []}
+            currentUid={auth.currentUser?.uid ?? null}
+            onAddInterest={handleAddInterest}
+          />
         </View>
 
         {inviteCode && (
@@ -363,6 +459,7 @@ export default function OverviewScreen() {
             </Pressable>
           )}
         </View>
+
       </ScrollView>
 
       {/* ── Add Friends Modal ── */}
@@ -409,7 +506,7 @@ export default function OverviewScreen() {
                 overflow: "hidden",
                 ...UI.shadow.card,
               }}>
-                {friends.map((friend, index) => {
+                {friends.filter(Boolean).map((friend, index) => {
                   const alreadyAdded = (trip?.memberUids ?? []).includes(friend.uid);
                   const isBusy = addingUid === friend.uid;
                   const initials = initialsFromName(friend.displayName || friend.username);
