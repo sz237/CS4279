@@ -32,7 +32,6 @@ function formatDateRange(start: string, end: string): string {
 const TABS = [
   { label: "Overview",  seg: "overview"  },
   { label: "Itinerary", seg: "itinerary" },
-  { label: "Explore",   seg: "explore"   },
 ] as const;
 
 type TabSeg = (typeof TABS)[number]["seg"];
