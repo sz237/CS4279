@@ -30,7 +30,8 @@ export default function EditProfileScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
-  const [displayName, setDisplayName] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [username, setUsername] = useState("");
   const [bio, setBio] = useState("");
   const [photoURL, setPhotoURL] = useState("");
@@ -39,7 +40,10 @@ export default function EditProfileScreen() {
   useEffect(() => {
     (async () => {
       const profile = await getCurrentUserProfile();
-      setDisplayName(profile?.displayName ?? auth.currentUser?.displayName ?? "");
+      const fullName = profile?.displayName ?? auth.currentUser?.displayName ?? "";
+      const parts = fullName.trim().split(/\s+/);
+      setFirstName(parts[0] ?? "");
+      setLastName(parts.slice(1).join(" ") ?? "");
       setUsername(profile?.username ?? "");
       setBio(profile?.bio ?? "");
       setPhotoURL(profile?.photoURL ?? auth.currentUser?.photoURL ?? "");
@@ -47,10 +51,14 @@ export default function EditProfileScreen() {
   }, []);
 
   const handleSave = async () => {
+    if (!firstName.trim() || !lastName.trim()) {
+      Alert.alert("Required", "Please enter both your first and last name.");
+      return;
+    }
     try {
       setSaving(true);
       await updateCurrentUserProfile({
-        displayName,
+        displayName: `${firstName.trim()} ${lastName.trim()}`,
         username,
         bio,
         photoURL: photoURL || null,
@@ -64,7 +72,7 @@ export default function EditProfileScreen() {
     }
   };
 
-  const initials = initialsFromName(displayName || "U");
+  const initials = initialsFromName(`${firstName} ${lastName}`.trim() || "U");
 
   return (
     <ScrollView
@@ -138,72 +146,65 @@ export default function EditProfileScreen() {
         }}
       >
         <View style={{ gap: 16 }}>
-          <View>
-            <Text
-              style={{
-                marginBottom: 8,
-                fontSize: UI.type.body,
-                fontWeight: "700",
-                color: UI.colors.textPrimary,
-              }}
-            >
-              Name
-            </Text>
-            <TextInput
-              value={displayName}
-              onChangeText={setDisplayName}
-              placeholder="Your name"
-              placeholderTextColor={UI.colors.textMuted}
-              style={{
-                borderWidth: 1,
-                borderColor: UI.colors.cardBorder,
-                borderRadius: UI.radius.button,
-                backgroundColor: UI.colors.cardBg,
-                paddingHorizontal: 16,
-                paddingVertical: 14,
-                fontSize: 16,
-                color: UI.colors.textPrimary,
-              }}
-            />
-          </View>
-
-          <View>
-            <Text
-              style={{
-                marginBottom: 8,
-                fontSize: UI.type.body,
-                fontWeight: "700",
-                color: UI.colors.textPrimary,
-              }}
-            >
-              Username
-            </Text>
-            <TextInput
-              value={username}
-              onChangeText={(text) => setUsername(text.toLowerCase().replace(/^@+/, ""))}
-              placeholder="username"
-              placeholderTextColor={UI.colors.textMuted}
-              autoCapitalize="none"
-              style={{
-                borderWidth: 1,
-                borderColor: UI.colors.cardBorder,
-                borderRadius: UI.radius.button,
-                backgroundColor: UI.colors.cardBg,
-                paddingHorizontal: 16,
-                paddingVertical: 14,
-                fontSize: 16,
-                color: UI.colors.textPrimary,
-              }}
-            />
-            <Text
-              style={{
-                marginTop: 6,
-                fontSize: 13,
-                color: UI.colors.textSecondary,
-              }}
-            >
-              Unique string of characters.
-            </Text>
+          <View style={{ flexDirection: "row", gap: 12 }}>
+            <View style={{ flex: 1 }}>
+              <Text
+                style={{
+                  marginBottom: 8,
+                  fontSize: UI.type.body,
+                  fontWeight: "700",
+                  color: UI.colors.textPrimary,
+                }}
+              >
+                First Name
+              </Text>
+              <TextInput
+                value={firstName}
+                onChangeText={setFirstName}
+                placeholder="Jane"
+                placeholderTextColor={UI.colors.textMuted}
+                autoCapitalize="words"
+                style={{
+                  borderWidth: 1,
+                  borderColor: UI.colors.cardBorder,
+                  borderRadius: UI.radius.button,
+                  backgroundColor: UI.colors.cardBg,
+                  paddingHorizontal: 16,
+                  paddingVertical: 14,
+                  fontSize: 16,
+                  color: UI.colors.textPrimary,
+                }}
+              />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text
+                style={{
+                  marginBottom: 8,
+                  fontSize: UI.type.body,
+                  fontWeight: "700",
+                  color: UI.colors.textPrimary,
+                }}
+              >
+                Last Name
+              </Text>
+              <TextInput
+                value={lastName}
+                onChangeText={setLastName}
+                placeholder="Doe"
+                placeholderTextColor={UI.colors.textMuted}
+                autoCapitalize="words"
+                style={{
+                  borderWidth: 1,
+                  borderColor: UI.colors.cardBorder,
+                  borderRadius: UI.radius.button,
+                  backgroundColor: UI.colors.cardBg,
+                  paddingHorizontal: 16,
+                  paddingVertical: 14,
+                  fontSize: 16,
+                  color: UI.colors.textPrimary,
+                }}
+              />
+            </View>
           </View>
 
           <View>

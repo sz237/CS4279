@@ -28,7 +28,7 @@ export default function ProfileLayout() {
       <Stack.Screen
         name="follow-list"
         options={{
-          title: "Connections",
+          title: "Friends",
           headerBackTitle: "Profile",
         }}
       />
@@ -44,6 +44,13 @@ export default function ProfileLayout() {
         options={{
           title: "Help & Support",
           headerBackTitle: "Profile",
+        }}
+      />
+      <Stack.Screen
+        name="user-profile"
+        options={{
+          title: "",
+          headerBackTitle: "Friends",
         }}
       />
     </Stack>

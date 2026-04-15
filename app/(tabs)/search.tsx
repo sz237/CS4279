@@ -2,6 +2,11 @@ import { useTrips } from "@/context/TripsContext";
 import { buildPlacePhotoUrl, placeDetails, placesTextSearch } from "@/lib/googleplaces";
 import { auth, db } from "@/src/config/firebase";
 import type { ItineraryModel, StopModel } from "@/src/models";
+import {
+  FriendStatus,
+  getFriendStatus,
+  sendFriendRequest,
+} from "@/src/services/profile";
 import { deleteStop } from "@/src/services/trips";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -107,6 +112,8 @@ export default function SearchScreen() {
   const [peopleBusy, setPeopleBusy] = useState(false);
   const [peopleResults, setPeopleResults] = useState<UserSearchResult[]>([]);
   const peopleDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [friendStatuses, setFriendStatuses] = useState<Record<string, FriendStatus>>({});
+  const [friendBusy, setFriendBusy] = useState<string | null>(null);
 
   // ── Detail / reviews modal ────────────────────────────────────────────────
   const [detailVisible, setDetailVisible] = useState(false);
@@ -262,6 +269,15 @@ export default function SearchScreen() {
           })
           .filter((u) => u.uid !== currentUid);
         setPeopleResults(found);
+
+        // Fetch friend status for each result
+        const statuses: Record<string, FriendStatus> = {};
+        await Promise.all(
+          found.map(async (u) => {
+            statuses[u.uid] = await getFriendStatus(u.uid);
+          })
+        );
+        setFriendStatuses(statuses);
       } catch {
         setPeopleResults([]);
       } finally {
@@ -269,6 +285,25 @@ export default function SearchScreen() {
       }
     }, 400);
   }, [currentUid]);
+
+  // ─── Friend request ─────────────────────────────────────────────────────────
+
+  const handleSendFriendRequest = useCallback(async (user: UserSearchResult) => {
+    setFriendBusy(user.uid);
+    try {
+      await sendFriendRequest({
+        uid: user.uid,
+        username: user.username,
+        displayName: user.displayName,
+        photoURL: user.photoURL,
+      });
+      setFriendStatuses((prev) => ({ ...prev, [user.uid]: "pending_sent" }));
+    } catch (err: any) {
+      Alert.alert("Error", err?.message ?? "Could not send friend request.");
+    } finally {
+      setFriendBusy(null);
+    }
+  }, []);
 
   // ─── Detail modal ───────────────────────────────────────────────────────────
 
@@ -666,26 +701,50 @@ export default function SearchScreen() {
             data={peopleResults}
             keyExtractor={(item) => item.uid}
             contentContainerStyle={styles.resultsContent}
-            renderItem={({ item }) => (
-              <View style={styles.personCard}>
-                {item.photoURL ? (
-                  <Image
-                    source={{ uri: item.photoURL }}
-                    style={styles.avatar}
-                  />
-                ) : (
-                  <View style={[styles.avatar, styles.avatarPlaceholder]}>
-                    <Ionicons name="person" size={20} color="#9CA3AF" />
+            renderItem={({ item }) => {
+              const status = friendStatuses[item.uid] ?? "none";
+              const isBusy = friendBusy === item.uid;
+              return (
+                <View style={styles.personCard}>
+                  {item.photoURL ? (
+                    <Image source={{ uri: item.photoURL }} style={styles.avatar} />
+                  ) : (
+                    <View style={[styles.avatar, styles.avatarPlaceholder]}>
+                      <Ionicons name="person" size={20} color="#9CA3AF" />
+                    </View>
+                  )}
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.personName}>{item.displayName || item.username}</Text>
+                    {!!item.username && (
+                      <Text style={styles.personUsername}>@{item.username}</Text>
+                    )}
                   </View>
-                )}
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.personName}>{item.displayName || item.username}</Text>
-                  {!!item.username && (
-                    <Text style={styles.personUsername}>@{item.username}</Text>
+                  {status === "friends" ? (
+                    <View style={styles.friendBadge}>
+                      <Ionicons name="checkmark" size={12} color="#fff" />
+                      <Text style={styles.friendBadgeText}>Friends</Text>
+                    </View>
+                  ) : status === "pending_sent" ? (
+                    <View style={[styles.friendBadge, { backgroundColor: "#9CA3AF" }]}>
+                      <Text style={styles.friendBadgeText}>Pending</Text>
+                    </View>
+                  ) : status === "pending_received" ? (
+                    <View style={[styles.friendBadge, { backgroundColor: "#F59E0B" }]}>
+                      <Text style={styles.friendBadgeText}>Respond</Text>
+                    </View>
+                  ) : (
+                    <Pressable
+                      onPress={() => handleSendFriendRequest(item)}
+                      disabled={isBusy}
+                      style={[styles.addFriendButton, isBusy && { opacity: 0.5 }]}
+                    >
+                      <Ionicons name="person-add-outline" size={14} color="#fff" />
+                      <Text style={styles.addFriendButtonText}>Add</Text>
+                    </Pressable>
                   )}
                 </View>
-              </View>
-            )}
+              );
+            }}
             ListEmptyComponent={
               peopleQuery.trim().length >= 2 && !peopleBusy ? (
                 <View style={styles.emptyState}>
@@ -960,6 +1019,26 @@ const styles = StyleSheet.create({
   },
   personName: { fontSize: 15, fontWeight: "700", color: "#111827" },
   personUsername: { fontSize: 13, color: "#9CA3AF", marginTop: 2 },
+  addFriendButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#6366F1",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  addFriendButtonText: { color: "#fff", fontSize: 13, fontWeight: "600" },
+  friendBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#10B981",
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  friendBadgeText: { color: "#fff", fontSize: 13, fontWeight: "600" },
 
   // Empty state
   emptyState: {

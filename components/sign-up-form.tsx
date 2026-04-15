@@ -11,31 +11,32 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { Text } from '@/components/ui/text';
-import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import * as React from 'react';
 import { Pressable, TextInput, View } from 'react-native';
 
-// Updated interface to match your usage
 interface SignUpFormProps {
-  handleSignUp: (email: string, password: string) => void;
+  handleSignUp: (email: string, password: string, displayName: string, username: string) => void;
 }
 
 export function SignUpForm({ handleSignUp, onSwitchToLogin }: SignUpFormProps & { onSwitchToLogin: () => void }) {
-  // 1. Initialize state for email and password
+  const [firstName, setFirstName] = React.useState('');
+  const [lastName, setLastName] = React.useState('');
+  const [username, setUsername] = React.useState('');
   const [email, setEmail] = React.useState('');
   const [password, setPassword] = React.useState('');
-  const router = useRouter();
-  
-  const passwordInputRef = React.useRef<TextInput>(null);
 
-  function onEmailSubmitEditing() {
-    passwordInputRef.current?.focus();
-  }
+  const [showPassword, setShowPassword] = React.useState(false);
 
-  // 2. Pass the email and password state to the handler
+  const lastNameRef = React.useRef<TextInput>(null);
+  const usernameRef = React.useRef<TextInput>(null);
+  const emailRef = React.useRef<TextInput>(null);
+  const passwordRef = React.useRef<TextInput>(null);
+
   function onSubmit() {
-    if (email && password) {
-      handleSignUp(email, password);
+    const displayName = `${firstName.trim()} ${lastName.trim()}`.trim();
+    if (firstName && lastName && username && email && password) {
+      handleSignUp(email, password, displayName, username);
     }
   }
 
@@ -48,45 +49,107 @@ export function SignUpForm({ handleSignUp, onSwitchToLogin }: SignUpFormProps & 
             Welcome! Please fill in the details to get started.
           </CardDescription>
         </CardHeader>
-        <CardContent className="gap-6">
-          <View className="gap-6">
+        <CardContent className="gap-4">
+          <View className="gap-4">
+
+            {/* First + Last name side by side */}
+            <View className="flex-row gap-3">
+              <View className="flex-1 gap-1.5">
+                <Label htmlFor="firstName">First Name</Label>
+                <Input
+                  id="firstName"
+                  placeholder="Jane"
+                  autoComplete="given-name"
+                  autoCapitalize="words"
+                  value={firstName}
+                  onChangeText={setFirstName}
+                  onSubmitEditing={() => lastNameRef.current?.focus()}
+                  returnKeyType="next"
+                  submitBehavior="submit"
+                />
+              </View>
+              <View className="flex-1 gap-1.5">
+                <Label htmlFor="lastName">Last Name</Label>
+                <Input
+                  ref={lastNameRef}
+                  id="lastName"
+                  placeholder="Doe"
+                  autoComplete="family-name"
+                  autoCapitalize="words"
+                  value={lastName}
+                  onChangeText={setLastName}
+                  onSubmitEditing={() => usernameRef.current?.focus()}
+                  returnKeyType="next"
+                  submitBehavior="submit"
+                />
+              </View>
+            </View>
+
             <View className="gap-1.5">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="username">Username</Label>
               <Input
-                id="email"
-                placeholder="m@example.com"
-                keyboardType="email-address"
-                autoComplete="email"
+                ref={usernameRef}
+                id="username"
+                placeholder="e.g. jane_doe"
                 autoCapitalize="none"
-                // 3. Update state on change
-                value={email}
-                onChangeText={setEmail}
-                onSubmitEditing={onEmailSubmitEditing}
+                autoCorrect={false}
+                value={username}
+                onChangeText={(text) => setUsername(text.toLowerCase().replace(/[^a-z0-9_.]/g, ''))}
+                onSubmitEditing={() => emailRef.current?.focus()}
                 returnKeyType="next"
                 submitBehavior="submit"
               />
             </View>
+
             <View className="gap-1.5">
-              <View className="flex-row items-center">
-                <Label htmlFor="password">Password</Label>
-              </View>
+              <Label htmlFor="email">Email</Label>
               <Input
-                ref={passwordInputRef}
-                id="password"
-                secureTextEntry
-                // 4. Update state on change
-                value={password}
-                onChangeText={setPassword}
-                returnKeyType="send"
-                onSubmitEditing={onSubmit}
+                ref={emailRef}
+                id="email"
+                placeholder="j_doe@example.com"
+                keyboardType="email-address"
+                autoComplete="email"
+                autoCapitalize="none"
+                value={email}
+                onChangeText={setEmail}
+                onSubmitEditing={() => passwordRef.current?.focus()}
+                returnKeyType="next"
+                submitBehavior="submit"
               />
             </View>
+
+            <View className="gap-1.5">
+              <Label htmlFor="password">Password</Label>
+              <View className="relative">
+                <Input
+                  ref={passwordRef}
+                  id="password"
+                  secureTextEntry={!showPassword}
+                  value={password}
+                  onChangeText={setPassword}
+                  returnKeyType="send"
+                  onSubmitEditing={onSubmit}
+                  className="pr-10"
+                />
+                <Pressable
+                  onPress={() => setShowPassword((v) => !v)}
+                  className="absolute right-3 top-0 bottom-0 justify-center"
+                  hitSlop={8}
+                >
+                  <Ionicons
+                    name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                    size={20}
+                    color="#9CA3AF"
+                  />
+                </Pressable>
+              </View>
+            </View>
+
             <Button className="w-full" onPress={onSubmit}>
               <Text>Continue</Text>
             </Button>
           </View>
-          
-          {/* Note: In your toggle setup, you might want to use the onSwitchToLogin prop here instead of a Link */}
+
           <View className="flex-row justify-center items-center gap-1">
             <Text className="text-sm text-muted-foreground">
               Already have an account?
