@@ -1,4 +1,7 @@
-import React, { useEffect, useRef, useState } from "react";
+import { placesTextSearch } from "@/lib/googleplaces";
+import type { InterestTag } from "@/src/models/trip";
+import { Ionicons } from "@expo/vector-icons";
+import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Keyboard,
@@ -13,8 +16,6 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Ionicons } from "@expo/vector-icons";
-import { placesTextSearch } from "@/lib/googleplaces";
 
 export interface ManualStopInput {
   name: string;
@@ -80,6 +81,9 @@ interface AddActivityModalProps {
   defaultTimeLabel?: string;
   locationBias?: { lat: number; lng: number };
   prefill?: ActivityPrefill;
+
+  interestTags?: InterestTag[];
+  onPressInterestTag?: (tag: InterestTag) => void;
 }
 
 export default function AddActivityModal({
@@ -89,6 +93,7 @@ export default function AddActivityModal({
   defaultTimeLabel,
   locationBias,
   prefill,
+  interestTags = [],
 }: AddActivityModalProps) {
   const [entryMode, setEntryMode] = useState<EntryMode>("search");
 
@@ -349,6 +354,83 @@ export default function AddActivityModal({
                   paddingBottom: bottomInset + 24,
                 }}
               >
+
+                {/* ── INTEREST SEARCH ── */}
+                {(interestTags?.length ?? 0) > 0 && (
+                  <View className="mb-5">
+                    <Text className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                      Saved Interests
+                    </Text>
+
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      contentContainerStyle={{ gap: 8 }}
+                    >
+                      {interestTags!
+                        .slice()
+                        .sort((a, b) => (b.voterUids?.length ?? 0) - (a.voterUids?.length ?? 0))
+                        .map((tag) => (
+                          <TouchableOpacity
+                            key={tag.id}
+                            activeOpacity={0.75}
+                            onPress={() => {
+                              setEntryMode("search");
+                              setSearchQuery(tag.label);
+                              setSelectedPlace(null);
+                              setSearchAddress("");
+                              handleSearchQueryChange(tag.label);
+                            }}
+                            style={{
+                              paddingHorizontal: 14,
+                              paddingVertical: 8,
+                              borderRadius: 999,
+                              backgroundColor: "#F5F3FF",
+                              borderWidth: 1,
+                              borderColor: "#DDD6FE",
+                              flexDirection: "row",
+                              alignItems: "center",
+                              gap: 6,
+                            }}
+                          >
+                            <Text
+                              style={{
+                                fontSize: 13,
+                                fontWeight: "600",
+                                color: "#7C3AED",
+                              }}
+                            >
+                              {tag.label}
+                            </Text>
+
+                            <View
+                              style={{
+                                minWidth: 20,
+                                height: 20,
+                                paddingHorizontal: 6,
+                                borderRadius: 999,
+                                backgroundColor: "#7C3AED",
+                                alignItems: "center",
+                                justifyContent: "center",
+                              }}
+                            >
+                              <Text
+                                style={{
+                                  fontSize: 11,
+                                  fontWeight: "700",
+                                  color: "#fff",
+                                }}
+                              >
+                                {tag.voterUids?.length ?? 0}
+                              </Text>
+                            </View>
+                          </TouchableOpacity>
+                        ))}
+                    </ScrollView>
+                  </View>
+                )}
+
+                {/* ── SEARCH MODE ── */}
                 {entryMode === "search" && (
                   <>
                     <View className="mb-1">

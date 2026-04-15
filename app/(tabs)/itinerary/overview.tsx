@@ -3,6 +3,7 @@ import { MemberChip } from "@/components/itinerary/MemberChip";
 import { useTrips } from "@/context/TripsContext";
 import { useItinerarySheet } from "@/lib/ItinerarySheetContext";
 import { auth } from "@/src/config/firebase";
+import { InterestTag } from "@/src/models/trip";
 import { FriendItem, getFriends } from "@/src/services/profile";
 import { updateItinerary } from "@/src/services/trips";
 import { UI } from "@/src/theme/ui";
@@ -137,6 +138,44 @@ function makeInterestTagId(label: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9\s-]/g, "")
     .replace(/\s+/g, "-");
+}
+
+async function handleToggleInterestVote(tag: InterestTag) {
+  if (!trip) return;
+
+  const uid = auth.currentUser?.uid;
+  if (!uid) {
+    Alert.alert("Error", "You must be signed in to vote.");
+    return;
+  }
+
+  const now = new Date().toISOString();
+
+  const nextTags = (trip.interestTags ?? [])
+    .map((t) => {
+      if (t.id !== tag.id) return t;
+
+      const alreadyVoted = (t.voterUids ?? []).includes(uid);
+
+      const nextVoterUids = alreadyVoted
+        ? (t.voterUids ?? []).filter((voterUid) => voterUid !== uid)
+        : [...(t.voterUids ?? []), uid];
+
+      return {
+        ...t,
+        voterUids: nextVoterUids,
+        updatedAt: now,
+      };
+    })
+    .filter((t) => (t.voterUids?.length ?? 0) > 0);
+
+  try {
+    await updateItinerary(trip.id, {
+      interestTags: nextTags,
+    });
+  } catch (err: any) {
+    Alert.alert("Error", err?.message ?? "Could not update vote.");
+  }
 }
 
 function formatInterestLabel(label: string): string {
@@ -307,6 +346,7 @@ async function handleAddInterest(rawLabel: string) {
             interestTags={trip?.interestTags ?? []}
             currentUid={auth.currentUser?.uid ?? null}
             onAddInterest={handleAddInterest}
+            onToggleVote={handleToggleInterestVote}
           />
         </View>
 
