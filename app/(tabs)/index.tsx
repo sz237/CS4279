@@ -32,8 +32,8 @@ export default function HomeScreen() {
       className="flex-1"
       style={{ backgroundColor: UI.colors.pageBg }}
       contentContainerStyle={{
-        paddingHorizontal: UI.spacing.pageX,
-        paddingTop: insets.top + UI.spacing.pageTop,
+        paddingHorizontal: 24,
+        paddingTop: insets.top + 16,
         paddingBottom: 32,
       }}
       showsVerticalScrollIndicator={false}

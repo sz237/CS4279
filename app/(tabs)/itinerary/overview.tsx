@@ -1,11 +1,14 @@
 import { MemberChip } from "@/components/itinerary/MemberChip";
 import { useTrips } from "@/context/TripsContext";
 import { useItinerarySheet } from "@/lib/ItinerarySheetContext";
+import { auth } from "@/src/config/firebase";
+import { FriendItem, getFriends } from "@/src/services/profile";
 import { updateItinerary } from "@/src/services/trips";
 import { UI } from "@/src/theme/ui";
 import { Ionicons } from "@expo/vector-icons";
 import { useEffect, useState } from "react";
-import { Pressable, ScrollView, Share, Text, TextInput, View } from "react-native";
+import { Alert, Image, Modal, Pressable, ScrollView, Share, Text, TextInput, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 function formatDateRange(start: string, end: string): string {
   const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
@@ -17,8 +20,14 @@ function formatDateRange(start: string, end: string): string {
   return `${MONTHS[s.getMonth()]} ${s.getDate()} – ${MONTHS[e.getMonth()]} ${e.getDate()}`;
 }
 
+function initialsFromName(name: string) {
+  const parts = name.trim().split(/\s+/);
+  return `${parts[0]?.[0] ?? ""}${parts.length > 1 ? parts[parts.length - 1][0] : ""}`.toUpperCase();
+}
+
 export default function OverviewScreen() {
   const { reportStickyHeaderHeight, setMapDay, openEditModal } = useItinerarySheet();
+  const insets = useSafeAreaInsets();
 
   useEffect(() => {
     setMapDay(null);
@@ -26,6 +35,38 @@ export default function OverviewScreen() {
 
   const { trips, selectedTripId } = useTrips();
   const trip = trips.find((t) => t.id === selectedTripId) ?? null;
+
+  // ── Friends modal ──────────────────────────────────────────────────────────
+  const [manageVisible, setManageVisible] = useState(false);
+  const [friends, setFriends] = useState<FriendItem[]>([]);
+  const [friendsLoading, setFriendsLoading] = useState(false);
+  const [addingUid, setAddingUid] = useState<string | null>(null);
+
+  const openManage = async () => {
+    setManageVisible(true);
+    setFriendsLoading(true);
+    try {
+      const uid = auth.currentUser?.uid;
+      if (uid) setFriends(await getFriends(uid));
+    } finally {
+      setFriendsLoading(false);
+    }
+  };
+
+  const handleAddFriend = async (friend: FriendItem) => {
+    if (!trip) return;
+    setAddingUid(friend.uid);
+    try {
+      await updateItinerary(trip.id, {
+        memberUids: [...(trip.memberUids ?? []), friend.uid],
+        memberUsernames: [...(trip.memberUsernames ?? []), friend.username],
+      });
+    } catch (err: any) {
+      Alert.alert("Error", err?.message ?? "Could not add friend.");
+    } finally {
+      setAddingUid(null);
+    }
+  };
 
   const [notesEditMode, setNotesEditMode] = useState(false);
   const [notes, setNotes] = useState(trip?.notes ?? "");
@@ -155,6 +196,7 @@ export default function OverviewScreen() {
             </Text>
 
             <Pressable
+              onPress={openManage}
               style={{ flexDirection: "row", alignItems: "center", gap: 4 }}
               accessibilityLabel="Invite group members"
             >
@@ -322,6 +364,106 @@ export default function OverviewScreen() {
           )}
         </View>
       </ScrollView>
+
+      {/* ── Add Friends Modal ── */}
+      <Modal visible={manageVisible} animationType="slide" onRequestClose={() => setManageVisible(false)}>
+        <View style={{ flex: 1, backgroundColor: UI.colors.pageBg }}>
+
+          {/* Header */}
+          <View style={{
+            flexDirection: "row",
+            alignItems: "center",
+            paddingHorizontal: 16,
+            paddingTop: insets.top + 12,
+            paddingBottom: 14,
+            borderBottomWidth: 1,
+            borderBottomColor: UI.colors.cardBorder,
+            backgroundColor: UI.colors.cardBg,
+          }}>
+            <Text style={{ flex: 1, fontSize: 18, fontWeight: "700", color: UI.colors.textPrimary }}>
+              Add Friends to Trip
+            </Text>
+            <Pressable onPress={() => setManageVisible(false)} hitSlop={8}>
+              <Ionicons name="close" size={24} color={UI.colors.textMuted} />
+            </Pressable>
+          </View>
+
+          <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 24 }}>
+            {friendsLoading ? (
+              <Text style={{ color: UI.colors.textMuted, fontSize: 14, textAlign: "center", marginTop: 40 }}>
+                Loading friends…
+              </Text>
+            ) : friends.length === 0 ? (
+              <View style={{ alignItems: "center", marginTop: 48, gap: 12 }}>
+                <Ionicons name="people-outline" size={44} color="#D1D5DB" />
+                <Text style={{ fontSize: 15, color: UI.colors.textMuted, textAlign: "center" }}>
+                  You haven't added any friends yet.{"\n"}Search for users in the Search tab!
+                </Text>
+              </View>
+            ) : (
+              <View style={{
+                backgroundColor: UI.colors.cardBg,
+                borderColor: UI.colors.cardBorder,
+                borderWidth: 1,
+                borderRadius: UI.radius.card,
+                overflow: "hidden",
+                ...UI.shadow.card,
+              }}>
+                {friends.map((friend, index) => {
+                  const alreadyAdded = (trip?.memberUids ?? []).includes(friend.uid);
+                  const isBusy = addingUid === friend.uid;
+                  const initials = initialsFromName(friend.displayName || friend.username);
+
+                  return (
+                    <View key={friend.uid}>
+                      {index > 0 && <View style={{ height: 1, backgroundColor: "#F3F4F6" }} />}
+                      <View style={{ flexDirection: "row", alignItems: "center", padding: 14 }}>
+
+                        {/* Avatar */}
+                        {friend.photoURL ? (
+                          <Image source={{ uri: friend.photoURL }} style={{ width: 46, height: 46, borderRadius: 23 }} />
+                        ) : (
+                          <View style={{ width: 46, height: 46, borderRadius: 23, backgroundColor: "#EEF2FF", alignItems: "center", justifyContent: "center" }}>
+                            <Text style={{ fontSize: 16, fontWeight: "700", color: UI.colors.brand }}>{initials}</Text>
+                          </View>
+                        )}
+
+                        {/* Name + username */}
+                        <View style={{ marginLeft: 12, flex: 1 }}>
+                          <Text style={{ fontSize: 15, fontWeight: "600", color: UI.colors.textPrimary }} numberOfLines={1}>
+                            {friend.displayName}
+                          </Text>
+                          <Text style={{ fontSize: 13, color: UI.colors.textSecondary, marginTop: 2 }}>
+                            @{friend.username}
+                          </Text>
+                        </View>
+
+                        {/* Add / Added button */}
+                        {alreadyAdded ? (
+                          <View style={{ flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 8, backgroundColor: "#F3F4F6" }}>
+                            <Ionicons name="checkmark" size={14} color={UI.colors.textMuted} />
+                            <Text style={{ fontSize: 13, color: UI.colors.textMuted, fontWeight: "500" }}>Added</Text>
+                          </View>
+                        ) : (
+                          <Pressable
+                            onPress={() => handleAddFriend(friend)}
+                            disabled={isBusy}
+                            style={{ paddingHorizontal: 14, paddingVertical: 7, borderRadius: 8, backgroundColor: UI.colors.brand, opacity: isBusy ? 0.5 : 1 }}
+                          >
+                            <Text style={{ fontSize: 13, color: "#fff", fontWeight: "600" }}>
+                              {isBusy ? "Adding…" : "Add"}
+                            </Text>
+                          </Pressable>
+                        )}
+                      </View>
+                    </View>
+                  );
+                })}
+              </View>
+            )}
+          </ScrollView>
+        </View>
+      </Modal>
     </View>
   );
 }

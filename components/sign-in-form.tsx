@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { Text } from '@/components/ui/text';
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import * as React from 'react';
 import { Pressable, type TextInput, View } from 'react-native';
@@ -24,6 +25,7 @@ export function SignInForm({ handleSignIn, onSwitchToSignUp }: SignInFormProps &
   // 1. Initialize local state to track user input
   const [email, setEmail] = React.useState('');
   const [password, setPassword] = React.useState('');
+  const [showPassword, setShowPassword] = React.useState(false);
   const router = useRouter();
   
   const passwordInputRef = React.useRef<TextInput>(null);
@@ -67,28 +69,30 @@ export function SignInForm({ handleSignIn, onSwitchToSignUp }: SignInFormProps &
               />
             </View>
             <View className="gap-1.5">
-              <View className="flex-row items-center">
-                <Label htmlFor="password">Password</Label>
-                <Button
-                  variant="link"
-                  size="sm"
-                  className="web:h-fit ml-auto h-4 px-1 py-0 sm:h-4"
-                  onPress={() => {
-                    // TODO: Add Forgot Password logic
-                  }}>
-                  <Text className="font-normal leading-4">Forgot your password?</Text>
-                </Button>
+              <Label htmlFor="password">Password</Label>
+              <View className="relative">
+                <Input
+                  ref={passwordInputRef}
+                  id="password"
+                  secureTextEntry={!showPassword}
+                  value={password}
+                  onChangeText={setPassword}
+                  returnKeyType="send"
+                  onSubmitEditing={onSubmit}
+                  className="pr-10"
+                />
+                <Pressable
+                  onPress={() => setShowPassword((v) => !v)}
+                  className="absolute right-3 top-0 bottom-0 justify-center"
+                  hitSlop={8}
+                >
+                  <Ionicons
+                    name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                    size={20}
+                    color="#9CA3AF"
+                  />
+                </Pressable>
               </View>
-              <Input
-                ref={passwordInputRef}
-                id="password"
-                secureTextEntry
-                // 4. Bind input value and update state on change
-                value={password}
-                onChangeText={setPassword}
-                returnKeyType="send"
-                onSubmitEditing={onSubmit}
-              />
             </View>
             <Button className="w-full" onPress={onSubmit}>
               <Text>Continue</Text>

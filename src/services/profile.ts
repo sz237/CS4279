@@ -3,10 +3,13 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { updateProfile as updateAuthProfile } from "firebase/auth";
 import {
   collection,
+  deleteDoc,
   doc,
   getDoc,
   getDocs,
   query,
+  serverTimestamp,
+  setDoc,
   where,
   writeBatch,
 } from "firebase/firestore";
@@ -21,12 +24,22 @@ export type ProfileUser = {
   bio: string | null;
 };
 
-export type FollowListItem = {
+export type FriendItem = {
   uid: string;
   username: string;
   displayName: string;
   photoURL: string | null;
 };
+
+export type FriendRequest = {
+  fromUid: string;
+  fromUsername: string;
+  fromDisplayName: string;
+  fromPhotoURL: string | null;
+  createdAt?: any;
+};
+
+export type FriendStatus = "friends" | "pending_sent" | "pending_received" | "none";
 
 export type ItineraryDoc = {
   id: string;
@@ -176,100 +189,117 @@ export async function updateCurrentUserProfile(params: {
   });
 }
 
-export async function getFollowing(uid: string): Promise<FollowListItem[]> {
-  const snap = await getDocs(collection(db, "users", uid, "following"));
+export async function getUserPublicProfile(uid: string): Promise<ProfileUser | null> {
+  const snap = await getDoc(doc(db, "users", uid));
+  if (!snap.exists()) return null;
+  const data = snap.data() as Partial<ProfileUser>;
+  return {
+    uid,
+    email: "",
+    username: data.username ?? "",
+    displayName: data.displayName ?? "",
+    photoURL: data.photoURL ?? null,
+    photoPath: data.photoPath ?? null,
+    bio: data.bio ?? null,
+  };
+}
+
+export async function getFriends(uid: string): Promise<FriendItem[]> {
+  const snap = await getDocs(collection(db, "users", uid, "friends"));
   return snap.docs.map((d) => {
     const x = d.data();
     return {
-      uid: x.followingUid,
-      username: x.followingUsername,
-      displayName: x.followingDisplayName,
-      photoURL: x.followingPhotoURL ?? null,
+      uid: x.friendUid,
+      username: x.friendUsername,
+      displayName: x.friendDisplayName,
+      photoURL: x.friendPhotoURL ?? null,
     };
   });
 }
 
-export async function getFollowers(uid: string): Promise<FollowListItem[]> {
-  const snap = await getDocs(collection(db, "users", uid, "followers"));
+export async function getPendingRequests(uid: string): Promise<FriendRequest[]> {
+  const snap = await getDocs(collection(db, "users", uid, "friendRequests"));
   return snap.docs.map((d) => {
     const x = d.data();
     return {
-      uid: x.followerUid,
-      username: x.followerUsername,
-      displayName: x.followerDisplayName,
-      photoURL: x.followerPhotoURL ?? null,
+      fromUid: x.fromUid,
+      fromUsername: x.fromUsername,
+      fromDisplayName: x.fromDisplayName,
+      fromPhotoURL: x.fromPhotoURL ?? null,
+      createdAt: x.createdAt,
     };
   });
 }
 
-export function getFakeFollowing(): FollowListItem[] {
-  return [
-    {
-      uid: "demo-following-1",
-      username: "ava_travels",
-      displayName: "Ava Patel",
-      photoURL: null,
-    },
-    {
-      uid: "demo-following-2",
-      username: "milesaway",
-      displayName: "Miles Turner",
-      photoURL: null,
-    },
-    {
-      uid: "demo-following-3",
-      username: "shzeng",
-      displayName: "Sarah Zeng",
-      photoURL: "https://i.insider.com/5df14d0ee94e860668396b82?width=700",
-    },
-    {
-      uid: "demo-following-4",
-      username: "tvtruong",
-      displayName: "Trieu Vy Truong",
-      photoURL:
-        "https://images.unsplash.com/photo-1543852786-1cf6624b9987?fm=jpg&q=60&w=3000&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8Mnx8Y2F0c3xlbnwwfHwwfHx8MA%3D%3D",
-    },
-    {
-      uid: "demo-following-5",
-      username: "tamaraq",
-      displayName: "Tamara Quiroz",
-      photoURL:
-        "https://www.chromethemer.com/backgrounds/google/images/beach-puppy-google-background.jpg",
-    },
-  ];
+export async function sendFriendRequest(to: FriendItem): Promise<void> {
+  const current = auth.currentUser;
+  if (!current) throw new Error("You must be signed in.");
+
+  const currentProfile = await getCurrentUserProfile();
+  await setDoc(doc(db, "users", to.uid, "friendRequests", current.uid), {
+    fromUid: current.uid,
+    fromUsername: currentProfile?.username ?? "",
+    fromDisplayName: currentProfile?.displayName ?? current.displayName ?? "",
+    fromPhotoURL: currentProfile?.photoURL ?? null,
+    createdAt: serverTimestamp(),
+  });
 }
 
-export function getFakeFollowers(): FollowListItem[] {
-  return [
-    {
-      uid: "demo-follower-1",
-      username: "shzeng",
-      displayName: "Sarah Zeng",
-      photoURL: "https://i.insider.com/5df14d0ee94e860668396b82?width=700",
-    },
-    {
-      uid: "demo-follower-2",
-      username: "tvtruong",
-      displayName: "Trieu Vy Truong",
-      photoURL:
-        "https://images.unsplash.com/photo-1543852786-1cf6624b9987?fm=jpg&q=60&w=3000&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxzZWFyY2h8Mnx8Y2F0c3xlbnwwfHwwfHx8MA%3D%3D",
-    },
-    {
-      uid: "demo-follower-3",
-      username: "tamaraq",
-      displayName: "Tamara Quiroz",
-      photoURL:
-        "https://www.chromethemer.com/backgrounds/google/images/beach-puppy-google-background.jpg",
-    },
-  ];
+export async function acceptFriendRequest(from: FriendRequest): Promise<void> {
+  const current = auth.currentUser;
+  if (!current) throw new Error("You must be signed in.");
+
+  const currentProfile = await getCurrentUserProfile();
+  const batch = writeBatch(db);
+
+  batch.set(doc(db, "users", current.uid, "friends", from.fromUid), {
+    friendUid: from.fromUid,
+    friendUsername: from.fromUsername,
+    friendDisplayName: from.fromDisplayName,
+    friendPhotoURL: from.fromPhotoURL,
+  });
+
+  batch.set(doc(db, "users", from.fromUid, "friends", current.uid), {
+    friendUid: current.uid,
+    friendUsername: currentProfile?.username ?? "",
+    friendDisplayName: currentProfile?.displayName ?? current.displayName ?? "",
+    friendPhotoURL: currentProfile?.photoURL ?? null,
+  });
+
+  batch.delete(doc(db, "users", current.uid, "friendRequests", from.fromUid));
+
+  await batch.commit();
 }
 
-export function getFollowingForUI(realFollowing: FollowListItem[]) {
-  return realFollowing.length > 0 ? realFollowing : getFakeFollowing();
+export async function rejectFriendRequest(fromUid: string): Promise<void> {
+  const current = auth.currentUser;
+  if (!current) throw new Error("You must be signed in.");
+  await deleteDoc(doc(db, "users", current.uid, "friendRequests", fromUid));
 }
 
-export function getFollowersForUI(realFollowers: FollowListItem[]) {
-  return realFollowers.length > 0 ? realFollowers : getFakeFollowers();
+export async function removeFriend(friendUid: string): Promise<void> {
+  const current = auth.currentUser;
+  if (!current) throw new Error("You must be signed in.");
+  const batch = writeBatch(db);
+  batch.delete(doc(db, "users", current.uid, "friends", friendUid));
+  batch.delete(doc(db, "users", friendUid, "friends", current.uid));
+  await batch.commit();
+}
+
+export async function getFriendStatus(otherUid: string): Promise<FriendStatus> {
+  const current = auth.currentUser;
+  if (!current) return "none";
+
+  const [friendSnap, sentSnap, receivedSnap] = await Promise.all([
+    getDoc(doc(db, "users", current.uid, "friends", otherUid)),
+    getDoc(doc(db, "users", otherUid, "friendRequests", current.uid)),
+    getDoc(doc(db, "users", current.uid, "friendRequests", otherUid)),
+  ]);
+
+  if (friendSnap.exists()) return "friends";
+  if (sentSnap.exists()) return "pending_sent";
+  if (receivedSnap.exists()) return "pending_received";
+  return "none";
 }
 
 export async function getOwnedItineraries(uid: string): Promise<ItineraryDoc[]> {
