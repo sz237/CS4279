@@ -26,9 +26,11 @@ import { TripDatePicker } from "@/components/TripDatePicker";
 import { useAddTripContext } from "@/context/AddTripContext";
 import type { TripStop } from "@/lib/trips";
 import { openStopInGoogleMaps } from "@/lib/trips";
+import { useFocusEffect } from "@react-navigation/native";
 import { estimateTravelMinutes } from "@/services/routeService";
 import type { AIActivityStop } from "@/services/types";
 import { saveAiItinerary } from "@/src/services/trips";
+import { useLocalSearchParams } from "expo-router";
 
 type FlatItem =
   | { kind: "header"; slot: string; label: string }
@@ -45,6 +47,7 @@ export default function AddTripScreen() {
   const insets = useSafeAreaInsets();
   const [formExpanded, setFormExpanded] = useState(false);
   const [pendingExtraStop, setPendingExtraStop] = useState<TripStop | null>(null);
+  const { prefillCity } = useLocalSearchParams<{ prefillCity?: string }>();
 
   const {
     cityOrArea, setCityOrArea,
@@ -70,6 +73,14 @@ export default function AddTripScreen() {
     GOOGLE_PLACES_API_KEY,
     interests,
   } = useAddTripContext();
+
+  useFocusEffect(
+    useCallback(() => {
+      if (prefillCity) {
+        setCityOrArea(prefillCity);
+      }
+    }, [prefillCity, setCityOrArea])
+  );
 
   const currentAiDay = aiDays ? (aiDays[selectedAiDayIdx] ?? aiDays[0]) : null;
   const currentAiActivities = currentAiDay?.activities ?? [];

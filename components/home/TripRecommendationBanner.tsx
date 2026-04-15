@@ -89,7 +89,7 @@ function getRecommendedCity(lovedCity: string): string {
 type Props = {
   lovedCity: string;
   onDismiss: () => void;
-  onPlanTrip: () => void;
+  onPlanTrip: (city: string) => void;
 };
 
 export function TripRecommendationBanner({ lovedCity, onDismiss, onPlanTrip }: Props) {
@@ -176,7 +176,7 @@ export function TripRecommendationBanner({ lovedCity, onDismiss, onPlanTrip }: P
 
       {/* CTA */}
       <Pressable
-        onPress={onPlanTrip}
+        onPress={() => onPlanTrip(recommendedCity)}
         style={{
           backgroundColor: UI.colors.brand,
           borderRadius: UI.radius.button,

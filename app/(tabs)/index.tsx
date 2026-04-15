@@ -8,8 +8,9 @@ import type { ItineraryModel } from "@/src/models";
 import { getTripMetaMap } from "@/src/services/profile";
 import { UI } from "@/src/theme/ui";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "expo-router";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 import { ActivityIndicator, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -43,35 +44,33 @@ export default function HomeScreen() {
 
   const [recommendationTrip, setRecommendationTrip] =
     useState<ItineraryModel | null>(null);
-  const checkedRef = useRef(false);
 
   const currentTrip = trips.find((t) => t.status === "current") ?? null;
   const upcomingTrips = trips.filter((t) => t.status === "upcoming");
 
-  useEffect(() => {
-    if (loading || checkedRef.current) return;
-    checkedRef.current = true;
+  useFocusEffect(
+    useCallback(() => {
+      if (loading) return;
 
-    (async () => {
-      try {
-        const [metaMap, shown] = await Promise.all([
-          getTripMetaMap(),
-          getShownRecommendations(),
-        ]);
+      (async () => {
+        try {
+          const [metaMap, shown] = await Promise.all([
+            getTripMetaMap(),
+            getShownRecommendations(),
+          ]);
 
-        const pastTrips = trips.filter((t) => t.status === "past");
-        const candidate = pastTrips.find(
-          (t) => (metaMap[t.id]?.rating ?? 0) === 5 && !shown.includes(t.id)
-        );
+          const pastTrips = trips.filter((t) => t.status === "past");
+          const candidate = pastTrips.find(
+            (t) => (metaMap[t.id]?.rating ?? 0) === 5 && !shown.includes(t.id)
+          );
 
-        if (candidate) {
-          setRecommendationTrip(candidate);
+          setRecommendationTrip(candidate ?? null);
+        } catch {
+          // Non-critical — silently skip if storage read fails
         }
-      } catch {
-        // Non-critical — silently skip if storage read fails
-      }
-    })();
-  }, [loading, trips]);
+      })();
+    }, [loading, trips])
+  );
 
   function openTrip(id: string) {
     selectTrip(id);
@@ -88,12 +87,12 @@ export default function HomeScreen() {
     setRecommendationTrip(null);
   }
 
-  async function handlePlanRecommendedTrip() {
+  async function handlePlanRecommendedTrip(city: string) {
     if (recommendationTrip) {
       await markRecommendationShown(recommendationTrip.id);
     }
     setRecommendationTrip(null);
-    router.push("/(tabs)/addTrip" as never);
+    router.push({ pathname: "/(tabs)/addTrip", params: { prefillCity: city } } as never);
   }
 
   return (
