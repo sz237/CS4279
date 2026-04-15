@@ -4,7 +4,6 @@ import { useItinerarySheet } from "@/lib/ItinerarySheetContext";
 import { updateItinerary } from "@/src/services/trips";
 import { UI } from "@/src/theme/ui";
 import { Ionicons } from "@expo/vector-icons";
-import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { Pressable, ScrollView, Share, Text, TextInput, View } from "react-native";
 
@@ -19,9 +18,6 @@ function formatDateRange(start: string, end: string): string {
 }
 
 export default function OverviewScreen() {
-  const router = useRouter();
-  const params = useLocalSearchParams<{ from?: string }>();
-
   const { reportStickyHeaderHeight, setMapDay, openEditModal } = useItinerarySheet();
 
   useEffect(() => {
@@ -46,20 +42,6 @@ export default function OverviewScreen() {
       setNotesDraft(trip?.notes ?? "");
     }
   }, [trip?.notes, notesEditMode]);
-
-  function handleBack() {
-    if (router.canGoBack()) {
-      router.back();
-      return;
-    }
-
-    if (params.from === "my-trips") {
-      router.push("/(tabs)/profile/my-trips" as never);
-      return;
-    }
-
-    router.push("/(tabs)" as never);
-  }
 
   function handleNotesEdit() {
     setNotesDraft(notes);
@@ -100,24 +82,6 @@ export default function OverviewScreen() {
         onLayout={(e) => reportStickyHeaderHeight(e.nativeEvent.layout.height)}
       >
         <View style={{ flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
-          <Pressable
-            onPress={handleBack}
-            style={{
-              width: 40,
-              height: 40,
-              borderRadius: UI.radius.pill,
-              backgroundColor: UI.colors.cardBg,
-              alignItems: "center",
-              justifyContent: "center",
-              marginTop: 4,
-              borderWidth: 1,
-              borderColor: UI.colors.cardBorder,
-            }}
-            accessibilityLabel="Go back"
-          >
-            <Ionicons name="chevron-back" size={20} color="#71717A" />
-          </Pressable>
-
           <View style={{ flex: 1, gap: 4 }}>
             <Text
               style={{

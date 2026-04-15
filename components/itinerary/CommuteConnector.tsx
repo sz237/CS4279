@@ -14,7 +14,7 @@ const MODE_CONFIG: Record<TravelMode, {
 
 type Props = {
   minutes?: number | null;
-  mode: TravelMode;
+  mode?: TravelMode | null;
 };
 
 function VerticalLine() {
@@ -22,15 +22,22 @@ function VerticalLine() {
 }
 
 export function CommuteConnector({ minutes, mode }: Props) {
-  const { icon, label } = MODE_CONFIG[mode];
+  const cfg = mode
+    ? MODE_CONFIG[mode]
+    : { icon: "ellipsis-horizontal" as const, label: "" };
+
+  const timeText =
+    minutes != null
+      ? `${minutes} min${cfg.label ? ` ${cfg.label}` : ""}`
+      : `-- min${cfg.label ? ` ${cfg.label}` : ""}`;
 
   return (
     <View className="items-center my-0.5">
       <VerticalLine />
       <View className="flex-row items-center gap-1.5 px-3 py-1.5 bg-slate-100/80 rounded-full border border-slate-200/50">
-        <Ionicons name={icon} size={12} color="#6B7280" />
+        <Ionicons name={cfg.icon} size={12} color="#6B7280" />
         <Text className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">
-          {minutes != null ? `${minutes} min ${label}` : `-- min ${label}`}
+          {timeText}
         </Text>
       </View>
       <VerticalLine />

@@ -314,6 +314,61 @@ export async function getStopsForDay(
   return snap.docs.map((d) => d.data() as StopModel);
 }
 
+// ─── Travel estimation ────────────────────────────────────────────────────────
+
+function haversineKm(
+  a: { lat: number; lng: number },
+  b: { lat: number; lng: number }
+): number {
+  const R = 6371;
+  const dLat = ((b.lat - a.lat) * Math.PI) / 180;
+  const dLng = ((b.lng - a.lng) * Math.PI) / 180;
+  const lat1 = (a.lat * Math.PI) / 180;
+  const lat2 = (b.lat * Math.PI) / 180;
+  const x =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(x));
+}
+
+/**
+ * For every consecutive pair of stops in the ordered list, compute Haversine-based
+ * travel mode and estimated minutes, then batch-write back to Firestore.
+ * The last stop always gets null (no next stop). Pairs where either stop has
+ * lat=0/lng=0 (geocoding failed) are also set to null.
+ */
+export async function persistTravelForDay(
+  itineraryId: string,
+  orderedStops: StopModel[]
+): Promise<void> {
+  if (orderedStops.length === 0) return;
+
+  const batch = writeBatch(db);
+
+  for (let i = 0; i < orderedStops.length; i++) {
+    const stop = orderedStops[i];
+    const next = orderedStops[i + 1];
+    const ref = doc(db, "itineraries", itineraryId, "stops", stop.id);
+
+    if (
+      next &&
+      stop.lat !== 0 && stop.lng !== 0 &&
+      next.lat !== 0 && next.lng !== 0
+    ) {
+      const dist = haversineKm(stop, next);
+      const travelMode = dist < 1.5 ? "walk" : "drive";
+      const speed = travelMode === "walk" ? 5 : 40;
+      const roadDist = dist * (travelMode === "drive" ? 1.25 : 1.0);
+      const travelMinutes = Math.max(1, Math.round((roadDist / speed) * 60));
+      batch.update(ref, { travelMode, travelMinutes });
+    } else {
+      batch.update(ref, { travelMode: null, travelMinutes: null });
+    }
+  }
+
+  await batch.commit();
+}
+
 // ─── AI Itinerary Save ────────────────────────────────────────────────────────
 
 type SaveAiParams = {

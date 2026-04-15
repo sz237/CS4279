@@ -17,16 +17,27 @@ interface Props {
   onTimeChange?: (id: string, newTime: string) => void;
 }
 
-type FlatItem =
+export type FlatItem =
   | { kind: "header"; slot: string; label: string; prevSlot: string | null }
   | { kind: "activity"; activity: Activity };
 
-const SLOTS = [
+export const SLOTS = [
   { slot: "morning",   label: "Morning",   icon: "sunny-outline" },
   { slot: "noon",      label: "Noon",      icon: "partly-sunny-outline" },
   { slot: "afternoon", label: "Afternoon", icon: "cloud-outline" },
   { slot: "evening",   label: "Evening",   icon: "moon-outline" },
 ] as const;
+
+export function TimeSlotSectionHeader({ label }: { label: string }) {
+  return (
+    <View className="px-5 pt-3 pb-1 flex-row items-center gap-3">
+      <Text className="text-xs font-bold text-zinc-400 uppercase tracking-widest">
+        {label}
+      </Text>
+      <View className="flex-1 h-px bg-zinc-200" />
+    </View>
+  );
+}
 
 export function EditableItineraryList({
   activities,
@@ -84,12 +95,7 @@ export function EditableItineraryList({
             {item.prevSlot && (
               <AddActivityButton onPress={() => onAddActivity?.(item.prevSlot!)} />
             )}
-            <View className="px-5 pt-3 pb-1 flex-row items-center gap-3">
-              <Text className="text-xs font-bold text-zinc-400 uppercase tracking-widest">
-                {item.label}
-              </Text>
-              <View className="flex-1 h-px bg-zinc-200" />
-            </View>
+            <TimeSlotSectionHeader label={item.label} />
           </View>
         );
       }

@@ -13,10 +13,23 @@ type PlaceTextSearchResult = {
   userRatingCount?: number;
 };
 
-export async function placesTextSearch(query: string): Promise<PlaceTextSearchResult[]> {
+export async function placesTextSearch(
+  query: string,
+  locationBias?: { lat: number; lng: number; radiusMeters?: number }
+): Promise<PlaceTextSearchResult[]> {
   const normalizedQuery = query.trim().toLowerCase();
   if (!normalizedQuery) {
     return [];
+  }
+
+  const body: Record<string, unknown> = { textQuery: normalizedQuery };
+  if (locationBias) {
+    body.locationBias = {
+      circle: {
+        center: { latitude: locationBias.lat, longitude: locationBias.lng },
+        radius: locationBias.radiusMeters ?? 20000,
+      },
+    };
   }
 
   const res = await fetch("https://places.googleapis.com/v1/places:searchText", {
@@ -27,7 +40,7 @@ export async function placesTextSearch(query: string): Promise<PlaceTextSearchRe
       "X-Goog-FieldMask":
         "places.id,places.displayName,places.formattedAddress,places.location,places.rating,places.userRatingCount",
     },
-    body: JSON.stringify({ textQuery: normalizedQuery }),
+    body: JSON.stringify(body),
   });
 
   if (!res.ok) {

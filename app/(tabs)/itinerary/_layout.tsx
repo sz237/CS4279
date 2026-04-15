@@ -1,6 +1,6 @@
 import { EditTripModal } from "@/components/itinerary/EditTripModal";
 import { Ionicons } from "@expo/vector-icons";
-import { Slot, usePathname, useRouter } from "expo-router";
+import { Slot, useLocalSearchParams, usePathname, useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Animated,
@@ -43,6 +43,7 @@ const DRAG_HANDLE_HEIGHT = 22;
 export default function ItineraryLayout() {
   const router = useRouter();
   const pathname = usePathname();
+  const { from } = useLocalSearchParams<{ from?: string }>();
   const activeSeg = pathname.split("/").pop() as TabSeg | string;
 
   const { trips, selectedTripId } = useTrips();
@@ -51,6 +52,10 @@ export default function ItineraryLayout() {
 
   // mapDay: null = show all stops (overview/explore), date string = filter to that day (itinerary tab)
   const [mapDay, setMapDay] = useState<string | null>(null);
+
+  // previewStops: set by the itinerary tab during edit mode to show reorder
+  // changes on the map before they're committed to Firestore.
+  const [previewStops, setPreviewStops] = useState<StopModel[] | null>(null);
 
   // Reset mapDay if it falls outside the trip's (possibly updated) date range
   useEffect(() => {
@@ -66,10 +71,14 @@ export default function ItineraryLayout() {
     ? stops.filter((s) => s.day != null && s.day >= trip.startDate && s.day <= trip.endDate)
     : stops;
 
-  const visibleStops: StopModel[] =
+  const firestoreVisibleStops: StopModel[] =
     activeSeg === "itinerary" && mapDay
       ? rangeStops.filter((s) => s.day === mapDay)
       : rangeStops;
+
+  // During edit mode the itinerary tab pushes a live-reordered list so the map
+  // reflects drag changes immediately, before anything is written to Firestore.
+  const visibleStops = previewStops ?? firestoreVisibleStops;
 
   const mapStops = visibleStops.map((s) => ({
     id: s.id,
@@ -201,7 +210,13 @@ export default function ItineraryLayout() {
       {/* ── Top header ───────────────────────────────────────────────── */}
       <View className="bg-white flex-row items-center px-4 py-3 border-b border-zinc-100">
         <TouchableOpacity
-          onPress={() => router.back()}
+          onPress={() => {
+            if (from === "my-trips") {
+              router.push("/(tabs)/profile/my-trips" as never);
+            } else {
+              router.push("/(tabs)" as never);
+            }
+          }}
           activeOpacity={0.7}
           className="mr-3"
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
@@ -245,7 +260,7 @@ export default function ItineraryLayout() {
                 />
               )}
               {mapStops.map((stop, index) => (
-                <Marker key={stop.id} coordinate={stop.coordinate} title={stop.title}>
+                <Marker key={`${stop.id}-${index}`} coordinate={stop.coordinate} title={stop.title}>
                   <View
                     className="bg-violet-600 w-7 h-7 rounded-full items-center justify-center border-2 border-white"
                     style={{
@@ -332,7 +347,7 @@ export default function ItineraryLayout() {
           </View>
 
           {/* Tab content */}
-          <ItinerarySheetContext.Provider value={{ reportStickyHeaderHeight, setMapDay: handleSetMapDay, openEditModal: handleOpenEditModal }}>
+          <ItinerarySheetContext.Provider value={{ reportStickyHeaderHeight, setMapDay: handleSetMapDay, openEditModal: handleOpenEditModal, setPreviewStops }}>
             <View style={{ flex: 1 }}>
               <Slot />
             </View>

@@ -82,17 +82,19 @@ export default function ActivityCard({
         </TouchableOpacity>
       )}
 
-      {/* Drag handle */}
-      <TouchableOpacity
-        onLongPress={drag}
-        className="px-3 py-4 justify-center"
-        activeOpacity={0.6}
-      >
-        <Ionicons name="reorder-three" size={22} color="#CBD5E1" />
-      </TouchableOpacity>
+      {/* Drag handle — only visible in edit mode */}
+      {drag && (
+        <TouchableOpacity
+          onLongPress={drag}
+          className="px-3 py-4 justify-center"
+          activeOpacity={0.6}
+        >
+          <Ionicons name="reorder-three" size={22} color="#CBD5E1" />
+        </TouchableOpacity>
+      )}
 
-      {/* Content */}
-      <View className="flex-1 py-3 pr-2 gap-1">
+      {/* Content — add left padding only when drag handle is absent */}
+      <View className={`flex-1 py-3 pr-2 gap-1${drag ? "" : " pl-4"}`}>
         {/* Title + time */}
         <View className="flex-row justify-between items-baseline">
           <Text className="text-base font-bold text-zinc-900 flex-1 mr-2" numberOfLines={1}>

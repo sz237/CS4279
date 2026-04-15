@@ -2,7 +2,14 @@ import { createContext, useContext, useEffect, useRef, useState, type ReactNode 
 import { onAuthStateChanged } from "firebase/auth";
 import { collection, onSnapshot, orderBy, query, where } from "firebase/firestore";
 import { auth, db } from "@/src/config/firebase";
-import type { ItineraryModel } from "@/src/models";
+import type { ItineraryModel, ItineraryStatus } from "@/src/models";
+
+function computeStatus(startDate: string, endDate: string): ItineraryStatus {
+  const today = new Date().toISOString().slice(0, 10); // "YYYY-MM-DD"
+  if (today < startDate) return "upcoming";
+  if (today > endDate) return "past";
+  return "current";
+}
 
 type TripsContextValue = {
   trips: ItineraryModel[];
@@ -42,7 +49,12 @@ export function TripsProvider({ children }: { children: ReactNode }) {
       unsubTripsRef.current = onSnapshot(
         q,
         (snap) => {
-          setTrips(snap.docs.map((d) => d.data() as ItineraryModel));
+          setTrips(
+            snap.docs.map((d) => {
+              const data = d.data() as ItineraryModel;
+              return { ...data, status: computeStatus(data.startDate, data.endDate) };
+            })
+          );
           setLoading(false);
         },
         () => {
