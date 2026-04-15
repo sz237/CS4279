@@ -15,6 +15,7 @@ import {
   TouchableWithoutFeedback,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export interface ManualStopInput {
   name: string;
@@ -44,9 +45,9 @@ type TimeOption = (typeof TIME_OPTIONS)[number];
 const DURATION_PRESETS = [
   { label: "15 min", minutes: 15 },
   { label: "30 min", minutes: 30 },
-  { label: "1 hr",   minutes: 60 },
-  { label: "2 hr",   minutes: 120 },
-  { label: "3 hr",   minutes: 180 },
+  { label: "1 hr", minutes: 60 },
+  { label: "2 hr", minutes: 120 },
+  { label: "3 hr", minutes: 180 },
 ] as const;
 
 const STEP = 5;
@@ -96,31 +97,31 @@ export default function AddActivityModal({
 }: AddActivityModalProps) {
   const [entryMode, setEntryMode] = useState<EntryMode>("search");
 
-  // Shared
   const [timeLabel, setTimeLabel] = useState<TimeOption | "">("");
   const [durationMinutes, setDurationMinutes] = useState<number | null>(null);
 
-  // Search mode
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedPlace, setSelectedPlace] = useState<PlaceResult | null>(null);
   const [searchResults, setSearchResults] = useState<PlaceResult[]>([]);
   const [searching, setSearching] = useState(false);
   const [searchAddress, setSearchAddress] = useState("");
 
-  // Manual mode
   const [manualName, setManualName] = useState("");
   const [manualAddress, setManualAddress] = useState("");
 
+  const { bottom: bottomInset } = useSafeAreaInsets();
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (!visible) return;
+
     if (defaultTimeLabel) {
       const match = TIME_OPTIONS.find(
         (o) => o.toLowerCase() === defaultTimeLabel.toLowerCase()
       );
       setTimeLabel(match ?? "");
     }
+
     if (prefill) {
       setEntryMode("search");
       setSearchQuery(prefill.name);
@@ -155,6 +156,7 @@ export default function AddActivityModal({
 
   function switchMode(mode: EntryMode) {
     if (mode === entryMode) return;
+
     setEntryMode(mode);
     setSearchQuery("");
     setSelectedPlace(null);
@@ -163,6 +165,7 @@ export default function AddActivityModal({
     setSearchAddress("");
     setManualName("");
     setManualAddress("");
+
     if (debounceRef.current) clearTimeout(debounceRef.current);
     Keyboard.dismiss();
   }
@@ -171,6 +174,7 @@ export default function AddActivityModal({
     setSearchQuery(text);
     setSelectedPlace(null);
     setSearchAddress("");
+
     if (debounceRef.current) clearTimeout(debounceRef.current);
 
     if (text.trim().length < 2) {
@@ -208,6 +212,7 @@ export default function AddActivityModal({
     setSearchAddress(place.address);
     setSearchResults([]);
     setSearching(false);
+
     if (debounceRef.current) clearTimeout(debounceRef.current);
     Keyboard.dismiss();
   }
@@ -215,6 +220,7 @@ export default function AddActivityModal({
   function handleAdd() {
     const name =
       entryMode === "search" ? searchQuery.trim() : manualName.trim();
+
     if (!name) return;
 
     onAdd({
@@ -252,21 +258,24 @@ export default function AddActivityModal({
       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
         <View className="flex-1 justify-end bg-black/40">
           <KeyboardAvoidingView
+            style={{ flex: 1, justifyContent: "flex-end" }}
             behavior={Platform.OS === "ios" ? "padding" : "height"}
           >
-            <View className="bg-white rounded-t-3xl" style={{ maxHeight: "90%" }}>
-              {/* Handle */}
+            <View
+              className="bg-white rounded-t-3xl overflow-hidden"
+              style={{ maxHeight: "90%" }}
+            >
               <View className="w-10 h-1 bg-gray-200 rounded-full self-center mt-3 mb-1" />
 
-              {/* Header */}
               <View className="flex-row items-center justify-between px-6 pt-3 pb-4">
-                <Text className="text-xl font-bold text-gray-900">Add Activity</Text>
+                <Text className="text-xl font-bold text-gray-900">
+                  Add Activity
+                </Text>
                 <TouchableOpacity onPress={onClose} hitSlop={8}>
                   <Ionicons name="close" size={22} color="#9CA3AF" />
                 </TouchableOpacity>
               </View>
 
-              {/* ── Mode toggle ── */}
               <View className="px-6 mb-5">
                 <View
                   style={{
@@ -278,6 +287,7 @@ export default function AddActivityModal({
                 >
                   {(["search", "manual"] as EntryMode[]).map((mode) => {
                     const isActive = entryMode === mode;
+
                     return (
                       <TouchableOpacity
                         key={mode}
@@ -338,11 +348,11 @@ export default function AddActivityModal({
 
               <ScrollView
                 keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
                 contentContainerStyle={{
                   paddingHorizontal: 24,
-                  paddingBottom: 40,
+                  paddingBottom: bottomInset + 24,
                 }}
-                showsVerticalScrollIndicator={false}
               >
 
                 {/* ── INTEREST SEARCH ── */}
@@ -428,7 +438,11 @@ export default function AddActivityModal({
                         Search
                       </Text>
                       <View className="flex-row items-center bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 gap-2">
-                        <Ionicons name="search-outline" size={16} color="#9CA3AF" />
+                        <Ionicons
+                          name="search-outline"
+                          size={16}
+                          color="#9CA3AF"
+                        />
                         <TextInput
                           value={searchQuery}
                           onChangeText={handleSearchQueryChange}
@@ -468,7 +482,6 @@ export default function AddActivityModal({
                       </View>
                     </View>
 
-                    {/* Dropdown */}
                     {showResults && (
                       <View
                         className="mb-3 border border-gray-100 rounded-xl overflow-hidden bg-white"
@@ -540,7 +553,6 @@ export default function AddActivityModal({
                       </View>
                     )}
 
-                    {/* Address — only shown once a place is selected */}
                     {selectedPlace && (
                       <View className="mb-4">
                         <Text className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
@@ -566,7 +578,6 @@ export default function AddActivityModal({
                   </>
                 )}
 
-                {/* ── MANUAL MODE ── */}
                 {entryMode === "manual" && (
                   <>
                     <View className="mb-4">
@@ -613,7 +624,6 @@ export default function AddActivityModal({
                   </>
                 )}
 
-                {/* ── Time of Day (shared) ── */}
                 <View className="mb-4">
                   <Text className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
                     Time of Day
@@ -621,6 +631,7 @@ export default function AddActivityModal({
                   <View className="flex-row gap-2">
                     {TIME_OPTIONS.map((option) => {
                       const isSelected = timeLabel === option;
+
                       return (
                         <TouchableOpacity
                           key={option}
@@ -645,11 +656,9 @@ export default function AddActivityModal({
                   </View>
                 </View>
 
-                {/* ── Duration (shared) ── */}
                 <View className="mb-6">
                   <Text className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
-                    Duration{" "}
-                    <Text className="text-gray-400">· Optional</Text>
+                    Duration <Text className="text-gray-400">· Optional</Text>
                   </Text>
 
                   <ScrollView
@@ -659,11 +668,14 @@ export default function AddActivityModal({
                   >
                     {DURATION_PRESETS.map((preset) => {
                       const isSelected = durationMinutes === preset.minutes;
+
                       return (
                         <TouchableOpacity
                           key={preset.minutes}
                           onPress={() =>
-                            setDurationMinutes(isSelected ? null : preset.minutes)
+                            setDurationMinutes(
+                              isSelected ? null : preset.minutes
+                            )
                           }
                           activeOpacity={0.75}
                           style={{
@@ -706,8 +718,8 @@ export default function AddActivityModal({
                           prev === null
                             ? null
                             : prev - STEP < MIN_DURATION
-                            ? null
-                            : prev - STEP
+                              ? null
+                              : prev - STEP
                         )
                       }
                       disabled={!durationMinutes}
@@ -784,7 +796,6 @@ export default function AddActivityModal({
                   </View>
                 </View>
 
-                {/* ── Add button ── */}
                 <TouchableOpacity
                   onPress={handleAdd}
                   disabled={!canAdd}
