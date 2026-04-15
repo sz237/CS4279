@@ -13,8 +13,10 @@ export interface ItineraryModel {
   endDate: string; // "YYYY-MM-DD"
   radiusMiles: number | null;
 
+  // Interests
   interests: string[]; // e.g. ["museums", "local cuisine"]
   memberInterestsByUid?: Record<string, string[]>;
+  interestTags: InterestTag[];
   
   stops: string[]; // ordered array of stopIds
 
@@ -87,4 +89,12 @@ export interface StopModel {
   travelMode: string | null;    // "walking" / "driving" / "transit" to the next stop
   travelMinutes: number | null; // estimated commute duration to the next stop
   category: string | null;      // e.g. "coffee shop", "restaurant", "attraction"
+}
+
+export interface InterestTag {
+  id: string;            // "live-music"
+  label: string;         // "Live Music"
+  voterUids: string[];   // ["u1", "u2"]
+  createdAt: string;
+  updatedAt: string;
 }

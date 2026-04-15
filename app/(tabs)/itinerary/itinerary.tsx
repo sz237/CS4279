@@ -1,33 +1,33 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocalSearchParams } from "expo-router";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FlatList, Text, TouchableOpacity, View } from "react-native";
 
 import ActivityCard, { Activity } from "@/components/itinerary/ActivityCard";
-import AddActivityModal, { ManualStopInput, ActivityPrefill } from "@/components/itinerary/AddActivityModal";
+import AddActivityModal, { ActivityPrefill, ManualStopInput } from "@/components/itinerary/AddActivityModal";
 import { CommuteConnector, TravelMode } from "@/components/itinerary/CommuteConnector";
+import { Day } from "@/components/itinerary/DayTabs";
 import {
   EditableItineraryList,
   FlatItem,
   SLOTS,
   TimeSlotSectionHeader,
 } from "@/components/itinerary/EditableItineraryList";
-import { Day } from "@/components/itinerary/DayTabs";
 import SheetStickyHeader from "@/components/itinerary/SheetStickyHeader";
-import { useItinerarySheet } from "@/lib/ItinerarySheetContext";
 import { useTrips } from "@/context/TripsContext";
 import { useStops } from "@/hooks/useStops";
+import { useItinerarySheet } from "@/lib/ItinerarySheetContext";
+import { haversineKm } from "@/services/routeService";
+import { db } from "@/src/config/firebase";
+import { searchText } from "@/src/googlePlaces";
 import type { StopModel } from "@/src/models";
 import {
-  saveStop,
   deleteStop,
-  updateStop,
   persistTravelForDay,
+  saveStop,
+  updateStop,
 } from "@/src/services/trips";
-import { searchText } from "@/src/googlePlaces";
-import { haversineKm } from "@/services/routeService";
 import { collection, doc, increment, updateDoc } from "firebase/firestore";
-import { db } from "@/src/config/firebase";
 
 const GOOGLE_API_KEY = process.env.EXPO_PUBLIC_googlePlacesApiKey as string;
 const KNOWN_SLOTS = new Set<string>(SLOTS.map((s) => s.slot));
@@ -640,6 +640,7 @@ export default function ItineraryTab() {
         defaultTimeLabel={pendingAddSlot}
         locationBias={routeCenter}
         prefill={directAddPrefill ?? undefined}
+        interestTags={trip?.interestTags ?? []}
       />
     </View>
   );
