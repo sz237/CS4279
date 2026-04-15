@@ -9,9 +9,15 @@ type PlaceTextSearchResult = {
   displayName?: { text?: string };
   formattedAddress?: string;
   location?: { latitude: number; longitude: number };
+  photos?: { name: string }[];
   rating?: number;
   userRatingCount?: number;
+  types?: string[];
 };
+
+export function buildPlacePhotoUrl(photoName: string, maxWidthPx = 1200): string {
+  return `https://places.googleapis.com/v1/${photoName}/media?key=${API_KEY || ""}&maxWidthPx=${maxWidthPx}`;
+}
 
 export async function placesTextSearch(query: string): Promise<PlaceTextSearchResult[]> {
   const normalizedQuery = query.trim().toLowerCase();
@@ -25,7 +31,7 @@ export async function placesTextSearch(query: string): Promise<PlaceTextSearchRe
       "Content-Type": "application/json",
       "X-Goog-Api-Key": API_KEY || "",
       "X-Goog-FieldMask":
-        "places.id,places.displayName,places.formattedAddress,places.location,places.rating,places.userRatingCount",
+        "places.id,places.displayName,places.formattedAddress,places.location,places.photos,places.rating,places.userRatingCount,places.types",
     },
     body: JSON.stringify({ textQuery: normalizedQuery }),
   });

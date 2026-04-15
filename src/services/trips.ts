@@ -17,6 +17,7 @@ import {
   doc,
   getDoc,
   getDocs,
+  increment,
   limit,
   orderBy,
   query,
@@ -241,12 +242,18 @@ export async function updateStop(
   await updateDoc(doc(db, "itineraries", itineraryId, "stops", stopId), fields);
 }
 
-/** Delete a stop from an itinerary. */
+/** Delete a stop from an itinerary and decrement the itinerary's stopCount. */
 export async function deleteStop(
   itineraryId: string,
   stopId: string
 ): Promise<void> {
-  await deleteDoc(doc(db, "itineraries", itineraryId, "stops", stopId));
+  const batch = writeBatch(db);
+  batch.delete(doc(db, "itineraries", itineraryId, "stops", stopId));
+  batch.update(doc(db, "itineraries", itineraryId), {
+    stopCount: increment(-1),
+    updatedAt: new Date().toISOString(),
+  });
+  await batch.commit();
 }
 
 /** Batch-update both orderIndex and timeLabel for a reordered + relabelled list. */
@@ -300,18 +307,21 @@ export async function getStops(itineraryId: string): Promise<StopModel[]> {
   return snap.docs.map((d) => d.data() as StopModel);
 }
 
-/** Fetch stops for a specific day within an itinerary. */
+/** Fetch stops for a specific day within an itinerary, sorted by orderIndex. */
 export async function getStopsForDay(
   itineraryId: string,
   day: string // "YYYY-MM-DD"
 ): Promise<StopModel[]> {
+  // Uses only a single-field filter (no compound index needed).
+  // Sorting is done in JS since stop counts per day are small.
   const q = query(
     collection(db, "itineraries", itineraryId, "stops"),
-    where("day", "==", day),
-    orderBy("orderIndex", "asc")
+    where("day", "==", day)
   );
   const snap = await getDocs(q);
-  return snap.docs.map((d) => d.data() as StopModel);
+  return snap.docs
+    .map((d) => d.data() as StopModel)
+    .sort((a, b) => a.orderIndex - b.orderIndex);
 }
 
 // ─── AI Itinerary Save ────────────────────────────────────────────────────────

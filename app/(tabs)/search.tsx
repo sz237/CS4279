@@ -1,12 +1,13 @@
 import { useTrips } from "@/context/TripsContext";
-import { placeDetails, placesTextSearch } from "@/lib/googleplaces";
+import { buildPlacePhotoUrl, placeDetails, placesTextSearch } from "@/lib/googleplaces";
+import { estimateTravelMinutes, haversineKm } from "@/services/routeService";
 import { auth, db } from "@/src/config/firebase";
 import type { ItineraryModel, StopModel } from "@/src/models";
-import { deleteStop, saveStop } from "@/src/services/trips";
+import { deleteStop, getStopsForDay, updateItinerary } from "@/src/services/trips";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { collection, doc, getDocs, limit, query, where } from "firebase/firestore";
-import { useCallback, useMemo, useState } from "react";
+import { collection, doc, getDocs, limit, onSnapshot, query, where, writeBatch } from "firebase/firestore";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   FlatList,
@@ -32,6 +33,16 @@ type SearchResult = {
   address?: string;
   rating?: number;
   reviewCount?: number;
+  lat: number;
+  lng: number;
+  photoUrl: string | null;
+  types: string[];
+};
+
+type DayChip = {
+  id: string;        // "YYYY-MM-DD"
+  label: string;     // "Mon"
+  dateLabel: string; // "4/14"
 };
 
 type ReviewSnippet = {
@@ -62,6 +73,80 @@ function initialsFromName(name: string) {
   return `${first}${last}`.toUpperCase();
 }
 
+function generateDays(startDate: string, endDate: string): DayChip[] {
+  const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const days: DayChip[] = [];
+  const end = new Date(endDate + "T00:00:00");
+  let cur = new Date(startDate + "T00:00:00");
+  while (cur <= end) {
+    const iso = cur.toISOString().split("T")[0];
+    days.push({
+      id: iso,
+      label: DAY_NAMES[cur.getDay()],
+      dateLabel: `${cur.getMonth() + 1}/${cur.getDate()}`,
+    });
+    cur.setDate(cur.getDate() + 1);
+  }
+  return days;
+}
+
+function formatTripDateRange(startDate: string, endDate: string): string {
+  const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const s = new Date(startDate + "T00:00:00");
+  const e = new Date(endDate + "T00:00:00");
+  if (s.getFullYear() === e.getFullYear() && s.getMonth() === e.getMonth()) {
+    return `${MONTHS[s.getMonth()]} ${s.getDate()}–${e.getDate()}`;
+  }
+  return `${MONTHS[s.getMonth()]} ${s.getDate()} – ${MONTHS[e.getMonth()]} ${e.getDate()}`;
+}
+
+/**
+ * Cheapest-insertion heuristic: returns the index at which inserting `newCoord`
+ * causes the smallest increase in total route distance for `existingStops`.
+ */
+function findBestInsertionIndex(
+  existingStops: StopModel[],
+  newCoord: { lat: number; lng: number }
+): number {
+  const n = existingStops.length;
+  if (n === 0) return 0;
+  if (newCoord.lat === 0 && newCoord.lng === 0) return n;
+
+  let bestIndex = n;
+  let bestCost = Infinity;
+
+  for (let i = 0; i <= n; i++) {
+    let cost: number;
+    if (i === 0) {
+      cost = haversineKm(newCoord, { lat: existingStops[0].lat, lng: existingStops[0].lng });
+    } else if (i === n) {
+      cost = haversineKm({ lat: existingStops[n - 1].lat, lng: existingStops[n - 1].lng }, newCoord);
+    } else {
+      const prev = existingStops[i - 1];
+      const next = existingStops[i];
+      const removed = haversineKm(
+        { lat: prev.lat, lng: prev.lng },
+        { lat: next.lat, lng: next.lng }
+      );
+      const added =
+        haversineKm({ lat: prev.lat, lng: prev.lng }, newCoord) +
+        haversineKm(newCoord, { lat: next.lat, lng: next.lng });
+      cost = added - removed;
+    }
+    if (cost < bestCost) {
+      bestCost = cost;
+      bestIndex = i;
+    }
+  }
+  return bestIndex;
+}
+
+function inferTravelMode(distanceKm: number): "walk" | "transit" | "drive" {
+  if (distanceKm < 0.8) return "walk";
+  if (distanceKm < 4) return "transit";
+  return "drive";
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function SearchScreen() {
@@ -83,11 +168,18 @@ export default function SearchScreen() {
   const [detailError, setDetailError] = useState("");
   const [selectedPlace, setSelectedPlace] = useState<SearchResult | null>(null);
   const [reviewSnippets, setReviewSnippets] = useState<ReviewSnippet[]>([]);
-  const [addedStops, setAddedStops] = useState<Record<string, AddedStop>>({});
+  const [addedByPlaceId, setAddedByPlaceId] = useState<Record<string, AddedStop>>({});
   const [addBusy, setAddBusy] = useState<string | null>(null);
   const [tripPickerVisible, setTripPickerVisible] = useState(false);
   const [pendingPlace, setPendingPlace] = useState<SearchResult | null>(null);
   const [tripPickerOptions, setTripPickerOptions] = useState<ItineraryModel[]>([]);
+
+  // ── Day picker state ──────────────────────────────────────────────────────
+  const [dayPickerVisible, setDayPickerVisible] = useState(false);
+  const [dayPickerTrip, setDayPickerTrip] = useState<ItineraryModel | null>(null);
+  const [dayPickerPlace, setDayPickerPlace] = useState<SearchResult | null>(null);
+  const [dayPickerDay, setDayPickerDay] = useState("");
+  const [dayPickerBusy, setDayPickerBusy] = useState(false);
 
   // ── People search state ───────────────────────────────────────────────────
   const [peopleQuery, setPeopleQuery] = useState("");
@@ -100,7 +192,6 @@ export default function SearchScreen() {
 
   const canSearch = useMemo(() => location.trim().length > 0 && !busy, [location, busy]);
 
-  // Current or upcoming trips whose cityOrArea overlaps the searched location
   const matchingUpcomingTrips = useMemo(() => {
     const city = location.trim().toLowerCase();
     if (!city) return [];
@@ -111,6 +202,16 @@ export default function SearchScreen() {
           city.includes(trip.cityOrArea.toLowerCase()))
     );
   }, [trips, location]);
+
+  const dayPickerDays = useMemo<DayChip[]>(() => {
+    if (!dayPickerTrip) return [];
+    return generateDays(dayPickerTrip.startDate, dayPickerTrip.endDate);
+  }, [dayPickerTrip]);
+
+  const selectedDayChip = useMemo(
+    () => dayPickerDays.find((d) => d.id === dayPickerDay) ?? null,
+    [dayPickerDays, dayPickerDay]
+  );
 
   const runSearch = useCallback(async () => {
     const locationValue = location.trim();
@@ -134,6 +235,12 @@ export default function SearchScreen() {
         address: p.formattedAddress,
         rating: p.rating,
         reviewCount: p.userRatingCount,
+        lat: p.location?.latitude ?? 0,
+        lng: p.location?.longitude ?? 0,
+        photoUrl: p.photos?.[0]?.name
+          ? buildPlacePhotoUrl(p.photos[0].name)
+          : null,
+        types: p.types ?? [],
       }));
       setResults(mapped);
     } catch (err: any) {
@@ -170,37 +277,83 @@ export default function SearchScreen() {
   const closeDetails = useCallback(() => setDetailVisible(false), []);
 
   const saveStopToTrip = useCallback(
-    async (place: SearchResult, itineraryId: string) => {
-      const stopId = doc(collection(db, "itineraries", itineraryId, "stops")).id;
+    async (place: SearchResult, itineraryId: string, day: string) => {
       const trip = trips.find((t) => t.id === itineraryId);
+
+      // Fetch existing stops for this day to find the optimal insertion position
+      const existingStops = await getStopsForDay(itineraryId, day);
+      const insertionIdx = findBestInsertionIndex(existingStops, {
+        lat: place.lat,
+        lng: place.lng,
+      });
+
+      // Compute travel times using haversine
+      const prevStop = insertionIdx > 0 ? existingStops[insertionIdx - 1] : null;
+      const nextStop = insertionIdx < existingStops.length ? existingStops[insertionIdx] : null;
+
+      let newTravelMode: string | null = null;
+      let newTravelMinutes: number | null = null;
+      if (nextStop && place.lat !== 0 && nextStop.lat !== 0) {
+        const d = haversineKm({ lat: place.lat, lng: place.lng }, { lat: nextStop.lat, lng: nextStop.lng });
+        const m = inferTravelMode(d);
+        newTravelMode = m;
+        newTravelMinutes = estimateTravelMinutes({ lat: place.lat, lng: place.lng }, { lat: nextStop.lat, lng: nextStop.lng }, m);
+      }
+
+      const stopId = doc(collection(db, "itineraries", itineraryId, "stops")).id;
       const stop: StopModel = {
         id: stopId,
-        orderIndex: trip?.stopCount ?? 0,
-        day: null,
+        orderIndex: insertionIdx,
+        day,
         timeLabel: null,
         duration: null,
         placeId: place.id,
         name: place.name,
         address: place.address || "",
-        photoUrl: null,
-        lat: 0,
-        lng: 0,
+        photoUrl: place.photoUrl ?? null,
+        lat: place.lat,
+        lng: place.lng,
         rating: place.rating ?? null,
         userRatingCount: place.reviewCount ?? null,
-        types: [],
+        types: place.types,
         briefSummary: null,
-        travelMode: null,
-        travelMinutes: null,
+        travelMode: newTravelMode,
+        travelMinutes: newTravelMinutes,
         category: null,
       };
-      await saveStop(itineraryId, stop);
-      setAddedStops((prev) => ({ ...prev, [place.id]: { itineraryId, stopId } }));
+
+      // Renumber stops at or after insertion point; update prevStop travel to point at new stop
+      const batch = writeBatch(db);
+      existingStops.forEach((s, i) => {
+        if (i >= insertionIdx) {
+          batch.update(doc(db, "itineraries", itineraryId, "stops", s.id), { orderIndex: i + 1 });
+        }
+      });
+      if (prevStop && place.lat !== 0 && prevStop.lat !== 0) {
+        const d = haversineKm({ lat: prevStop.lat, lng: prevStop.lng }, { lat: place.lat, lng: place.lng });
+        const m = inferTravelMode(d);
+        batch.update(doc(db, "itineraries", itineraryId, "stops", prevStop.id), {
+          travelMode: m,
+          travelMinutes: estimateTravelMinutes({ lat: prevStop.lat, lng: prevStop.lng }, { lat: place.lat, lng: place.lng }, m),
+        });
+      }
+      batch.set(doc(db, "itineraries", itineraryId, "stops", stopId), stop);
+      await batch.commit();
+
+      await updateItinerary(itineraryId, { stopCount: (trip?.stopCount ?? 0) + 1 });
     },
     [trips]
   );
 
+  const openDayPicker = useCallback((place: SearchResult, trip: ItineraryModel) => {
+    setDayPickerPlace(place);
+    setDayPickerTrip(trip);
+    setDayPickerDay(trip.startDate);
+    setDayPickerVisible(true);
+  }, []);
+
   const handleAddToItinerary = useCallback(
-    async (item: SearchResult) => {
+    (item: SearchResult) => {
       if (matchingUpcomingTrips.length === 0) {
         Alert.alert(
           "No trips found",
@@ -209,54 +362,93 @@ export default function SearchScreen() {
         return;
       }
       if (matchingUpcomingTrips.length === 1) {
-        setAddBusy(item.id);
-        try {
-          await saveStopToTrip(item, matchingUpcomingTrips[0].id);
-        } finally {
-          setAddBusy(null);
-        }
+        openDayPicker(item, matchingUpcomingTrips[0]);
         return;
       }
       setPendingPlace(item);
       setTripPickerOptions(matchingUpcomingTrips);
       setTripPickerVisible(true);
     },
-    [matchingUpcomingTrips, saveStopToTrip, location]
+    [matchingUpcomingTrips, openDayPicker, location]
   );
 
   const handleTripPicked = useCallback(
-    async (trip: ItineraryModel) => {
+    (trip: ItineraryModel) => {
       if (!pendingPlace) return;
       setTripPickerVisible(false);
-      setAddBusy(pendingPlace.id);
-      try {
-        await saveStopToTrip(pendingPlace, trip.id);
-      } finally {
-        setAddBusy(null);
-        setPendingPlace(null);
-      }
+      openDayPicker(pendingPlace, trip);
+      setPendingPlace(null);
     },
-    [pendingPlace, saveStopToTrip]
+    [pendingPlace, openDayPicker]
   );
+
+  const handleDayPickerAdd = useCallback(async () => {
+    if (!dayPickerPlace || !dayPickerTrip || !dayPickerDay) return;
+    setDayPickerBusy(true);
+    try {
+      await saveStopToTrip(dayPickerPlace, dayPickerTrip.id, dayPickerDay);
+      setDayPickerVisible(false);
+      setDayPickerPlace(null);
+      setDayPickerTrip(null);
+    } finally {
+      setDayPickerBusy(false);
+    }
+  }, [dayPickerPlace, dayPickerTrip, dayPickerDay, saveStopToTrip]);
 
   const handleRemove = useCallback(
     async (placeId: string) => {
-      const added = addedStops[placeId];
+      const added = addedByPlaceId[placeId];
       if (!added) return;
       setAddBusy(placeId);
       try {
         await deleteStop(added.itineraryId, added.stopId);
-        setAddedStops((prev) => {
-          const next = { ...prev };
-          delete next[placeId];
-          return next;
-        });
       } finally {
         setAddBusy(null);
       }
     },
-    [addedStops]
+    [addedByPlaceId]
   );
+
+  // Live subscription: mirror matching trips' stops into addedByPlaceId so
+  // any delete (from the itinerary edit view) immediately updates this tab.
+  const perTripRef = useRef<Record<string, Record<string, AddedStop>>>({});
+  useEffect(() => {
+    if (matchingUpcomingTrips.length === 0) {
+      perTripRef.current = {};
+      setAddedByPlaceId({});
+      return;
+    }
+
+    const unsubs: (() => void)[] = [];
+
+    for (const trip of matchingUpcomingTrips) {
+      const tripId = trip.id;
+      perTripRef.current[tripId] = {};
+
+      const unsub = onSnapshot(
+        collection(db, "itineraries", tripId, "stops"),
+        (snap) => {
+          const entries: Record<string, AddedStop> = {};
+          for (const d of snap.docs) {
+            const stop = d.data() as StopModel;
+            if (stop.placeId) {
+              entries[stop.placeId] = { itineraryId: tripId, stopId: stop.id };
+            }
+          }
+          perTripRef.current[tripId] = entries;
+
+          const merged: Record<string, AddedStop> = {};
+          for (const e of Object.values(perTripRef.current)) Object.assign(merged, e);
+          setAddedByPlaceId(merged);
+        }
+      );
+      unsubs.push(unsub);
+    }
+
+    return () => {
+      unsubs.forEach((u) => u());
+    };
+  }, [matchingUpcomingTrips]);
 
   // ── People logic ──────────────────────────────────────────────────────────
 
@@ -539,7 +731,7 @@ export default function SearchScreen() {
               ) : null
             }
             renderItem={({ item }) => {
-              const isAdded = !!addedStops[item.id];
+              const isAdded = !!addedByPlaceId[item.id];
               const isBusy = addBusy === item.id;
               return (
                 <View style={styles.resultCard}>
@@ -708,7 +900,7 @@ export default function SearchScreen() {
         </View>
       </Modal>
 
-      {/* ── Trip picker modal ── */}
+      {/* ── Trip picker modal (2+ matching trips) ── */}
       <Modal
         visible={tripPickerVisible}
         transparent
@@ -743,6 +935,112 @@ export default function SearchScreen() {
                 <Ionicons name="chevron-forward" size={16} color="#9CA3AF" />
               </Pressable>
             ))}
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── Day picker modal ── */}
+      <Modal
+        visible={dayPickerVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => { if (!dayPickerBusy) setDayPickerVisible(false); }}
+      >
+        <View style={styles.dayPickerBackdrop}>
+          <View style={[styles.dayPickerCard, { paddingBottom: Math.max(insets.bottom, 24) }]}>
+            {/* Drag handle */}
+            <View style={styles.dayPickerHandle} />
+
+            {/* Header */}
+            <View style={styles.dayPickerHeader}>
+              <Text style={styles.dayPickerTitle}>Add to Itinerary</Text>
+              <Pressable
+                onPress={() => { if (!dayPickerBusy) setDayPickerVisible(false); }}
+                hitSlop={8}
+              >
+                <Ionicons name="close" size={22} color="#6B7280" />
+              </Pressable>
+            </View>
+
+            {/* Place name */}
+            {dayPickerPlace && (
+              <Text style={styles.dayPickerPlaceName} numberOfLines={2}>
+                {dayPickerPlace.name}
+              </Text>
+            )}
+
+            {/* Trip info */}
+            {dayPickerTrip && (
+              <View style={styles.dayPickerTripRow}>
+                <Ionicons name="briefcase-outline" size={13} color="#6D28D9" />
+                <Text style={styles.dayPickerTripLabel} numberOfLines={1}>
+                  {dayPickerTrip.title}
+                </Text>
+                <Text style={styles.dayPickerTripDate}>
+                  · {formatTripDateRange(dayPickerTrip.startDate, dayPickerTrip.endDate)}
+                </Text>
+              </View>
+            )}
+
+            <View style={styles.dayPickerDivider} />
+
+            {/* Day selector */}
+            <Text style={styles.dayPickerSectionLabel}>Select a day</Text>
+
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.dayChipScroll}
+            >
+              {dayPickerDays.map((d) => {
+                const isSelected = d.id === dayPickerDay;
+                return (
+                  <Pressable
+                    key={d.id}
+                    style={[styles.dayChip, isSelected && styles.dayChipActive]}
+                    onPress={() => setDayPickerDay(d.id)}
+                  >
+                    <Text style={[styles.dayChipLabel, isSelected && styles.dayChipLabelActive]}>
+                      {d.label}
+                    </Text>
+                    <Text style={[styles.dayChipDate, isSelected && styles.dayChipDateActive]}>
+                      {d.dateLabel}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+
+            {/* Hint */}
+            <Text style={styles.dayPickerHint}>
+              Place will be inserted at the best position to minimize travel time.
+            </Text>
+
+            {/* Add button */}
+            <TouchableOpacity
+              onPress={handleDayPickerAdd}
+              disabled={dayPickerBusy || !dayPickerDay}
+              activeOpacity={0.88}
+              style={[
+                styles.dayPickerAddButton,
+                (dayPickerBusy || !dayPickerDay) && styles.buttonDisabled,
+              ]}
+            >
+              <LinearGradient
+                colors={["#6D28D9", "#7C3AED"]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.dayPickerAddGradient}
+              >
+                <Text style={styles.dayPickerAddText}>
+                  {dayPickerBusy
+                    ? "Adding…"
+                    : selectedDayChip
+                    ? `Add to ${selectedDayChip.label} ${selectedDayChip.dateLabel}`
+                    : "Add"}
+                </Text>
+              </LinearGradient>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -938,6 +1236,97 @@ const styles = StyleSheet.create({
   },
   reviewMeta: { fontSize: 12, color: "#6B7280", marginBottom: 4 },
   reviewText: { fontSize: 13, color: "#111827", lineHeight: 18 },
+
+  // Day picker modal
+  dayPickerBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(17, 24, 39, 0.45)",
+    justifyContent: "flex-end",
+  },
+  dayPickerCard: {
+    backgroundColor: "#FFFFFF",
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+  },
+  dayPickerHandle: {
+    width: 36,
+    height: 4,
+    backgroundColor: "#E5E7EB",
+    borderRadius: 2,
+    alignSelf: "center",
+    marginBottom: 16,
+  },
+  dayPickerHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 6,
+  },
+  dayPickerTitle: { fontSize: 17, fontWeight: "700", color: "#111827" },
+  dayPickerPlaceName: {
+    fontSize: 14,
+    color: "#6B7280",
+    lineHeight: 20,
+    marginBottom: 10,
+  },
+  dayPickerTripRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+  dayPickerTripLabel: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#6D28D9",
+    flexShrink: 1,
+  },
+  dayPickerTripDate: { fontSize: 13, color: "#9CA3AF" },
+  dayPickerDivider: {
+    height: 1,
+    backgroundColor: "#F3F4F6",
+    marginVertical: 16,
+  },
+  dayPickerSectionLabel: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#6B7280",
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+    marginBottom: 12,
+  },
+  dayChipScroll: { gap: 8, paddingBottom: 4 },
+  dayChip: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+    backgroundColor: "#F4F4F5",
+    borderRadius: 12,
+    minWidth: 58,
+  },
+  dayChipActive: { backgroundColor: "#111827" },
+  dayChipLabel: { fontSize: 13, fontWeight: "700", color: "#374151" },
+  dayChipLabelActive: { color: "#FFFFFF" },
+  dayChipDate: { fontSize: 11, color: "#9CA3AF", marginTop: 2 },
+  dayChipDateActive: { color: "#D1D5DB" },
+  dayPickerHint: {
+    fontSize: 12,
+    color: "#9CA3AF",
+    textAlign: "center",
+    marginTop: 14,
+    marginBottom: 16,
+  },
+  dayPickerAddButton: {
+    borderRadius: 14,
+    overflow: "hidden",
+  },
+  dayPickerAddGradient: {
+    paddingVertical: 14,
+    alignItems: "center",
+  },
+  dayPickerAddText: { fontSize: 15, fontWeight: "700", color: "#FFFFFF" },
 
   // Trip picker modal
   pickerBackdrop: {
