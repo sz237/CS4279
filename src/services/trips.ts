@@ -13,10 +13,10 @@ import {
 import {
   arrayUnion,
   collection,
-  deleteDoc,
   doc,
   getDoc,
   getDocs,
+  increment,
   limit,
   orderBy,
   query,
@@ -241,12 +241,18 @@ export async function updateStop(
   await updateDoc(doc(db, "itineraries", itineraryId, "stops", stopId), fields);
 }
 
-/** Delete a stop from an itinerary. */
+/** Delete a stop from an itinerary and atomically decrement stopCount. */
 export async function deleteStop(
   itineraryId: string,
   stopId: string
 ): Promise<void> {
-  await deleteDoc(doc(db, "itineraries", itineraryId, "stops", stopId));
+  const batch = writeBatch(db);
+  batch.delete(doc(db, "itineraries", itineraryId, "stops", stopId));
+  batch.update(doc(db, "itineraries", itineraryId), {
+    stopCount: increment(-1),
+    updatedAt: new Date().toISOString(),
+  });
+  await batch.commit();
 }
 
 /** Batch-update both orderIndex and timeLabel for a reordered + relabelled list. */
@@ -305,13 +311,15 @@ export async function getStopsForDay(
   itineraryId: string,
   day: string // "YYYY-MM-DD"
 ): Promise<StopModel[]> {
+  // No orderBy to avoid composite index requirement — sort in JS instead.
   const q = query(
     collection(db, "itineraries", itineraryId, "stops"),
-    where("day", "==", day),
-    orderBy("orderIndex", "asc")
+    where("day", "==", day)
   );
   const snap = await getDocs(q);
-  return snap.docs.map((d) => d.data() as StopModel);
+  return snap.docs
+    .map((d) => d.data() as StopModel)
+    .sort((a, b) => a.orderIndex - b.orderIndex);
 }
 
 // ─── Travel estimation ────────────────────────────────────────────────────────

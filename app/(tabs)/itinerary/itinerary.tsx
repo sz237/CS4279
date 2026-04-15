@@ -1,9 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useLocalSearchParams } from "expo-router";
 import { FlatList, Text, TouchableOpacity, View } from "react-native";
 
 import ActivityCard, { Activity } from "@/components/itinerary/ActivityCard";
-import AddActivityModal, { ManualStopInput } from "@/components/itinerary/AddActivityModal";
+import AddActivityModal, { ManualStopInput, ActivityPrefill } from "@/components/itinerary/AddActivityModal";
 import { CommuteConnector, TravelMode } from "@/components/itinerary/CommuteConnector";
 import {
   EditableItineraryList,
@@ -25,7 +26,7 @@ import {
 } from "@/src/services/trips";
 import { searchText } from "@/src/googlePlaces";
 import { haversineKm } from "@/services/routeService";
-import { collection, doc } from "firebase/firestore";
+import { collection, doc, increment, updateDoc } from "firebase/firestore";
 import { db } from "@/src/config/firebase";
 
 const GOOGLE_API_KEY = process.env.EXPO_PUBLIC_googlePlacesApiKey as string;
@@ -132,6 +133,21 @@ export default function ItineraryTab() {
   const trip = trips.find((t) => t.id === selectedTripId) ?? null;
   const { stops } = useStops(selectedTripId);
 
+  // Navigation params from search tab "Add to Itinerary" flow
+  const searchParams = useLocalSearchParams<{
+    _t?: string;
+    day?: string;
+    prefillName?: string;
+    prefillAddress?: string;
+    prefillPlaceId?: string;
+    prefillLat?: string;
+    prefillLng?: string;
+    prefillRating?: string;
+    prefillUserRatingCount?: string;
+    prefillPhotoUrl?: string;
+    prefillTypes?: string;
+  }>();
+
   const days: Day[] = useMemo(() => {
     if (!trip?.startDate || !trip?.endDate) return [];
     return generateDayTabs(trip.startDate, trip.endDate);
@@ -141,6 +157,13 @@ export default function ItineraryTab() {
   const [isEditMode, setIsEditMode] = useState(false);
   const [addModalVisible, setAddModalVisible] = useState(false);
   const [pendingAddSlot, setPendingAddSlot] = useState<string | undefined>(undefined);
+
+  // Prefill data for direct-add modal triggered by search tab navigation
+  const [directAddPrefill, setDirectAddPrefill] = useState<(ActivityPrefill & {
+    day: string;
+    photoUrl?: string;
+    types?: string[];
+  }) | null>(null);
 
   // Local edit state — populated on entering edit mode, null when in view mode.
   // All mutations during edit session update this state only; nothing is written
@@ -154,6 +177,31 @@ export default function ItineraryTab() {
       setSelectedDayId(days[0].id);
     }
   }, [days]);
+
+  // Handle incoming prefill params from search tab "Add to Itinerary" → day picker flow.
+  // Use _t (timestamp) as a unique key so each new navigation fires the effect exactly once.
+  const lastPrefillTimestampRef = useRef<string | null>(null);
+  useEffect(() => {
+    const { _t, day, prefillName, prefillAddress, prefillPlaceId, prefillLat, prefillLng,
+            prefillRating, prefillUserRatingCount, prefillPhotoUrl, prefillTypes } = searchParams;
+    if (!_t || !prefillName || !day || _t === lastPrefillTimestampRef.current) return;
+    lastPrefillTimestampRef.current = _t;
+
+    setSelectedDayId(day);
+    setDirectAddPrefill({
+      name: prefillName,
+      address: prefillAddress || "",
+      placeId: prefillPlaceId || undefined,
+      lat: prefillLat ? parseFloat(prefillLat) : undefined,
+      lng: prefillLng ? parseFloat(prefillLng) : undefined,
+      rating: prefillRating ? parseFloat(prefillRating) : undefined,
+      userRatingCount: prefillUserRatingCount ? parseInt(prefillUserRatingCount, 10) : undefined,
+      photoUrl: prefillPhotoUrl || undefined,
+      types: prefillTypes ? prefillTypes.split(",").filter(Boolean) : undefined,
+      day,
+    });
+    setAddModalVisible(true);
+  }, [searchParams._t, searchParams.prefillName, searchParams.day]);
 
   useEffect(() => {
     if (selectedDayId) setMapDay(selectedDayId);
@@ -403,6 +451,63 @@ export default function ItineraryTab() {
     [selectedTripId, selectedDayId, editActivities]
   );
 
+  // ─── Direct-add handler (from search tab navigation) ─────────────────────────
+
+  const handleDirectAdd = useCallback(
+    async (input: ManualStopInput) => {
+      if (!selectedTripId || !directAddPrefill) return;
+
+      let lat = input.lat ?? directAddPrefill.lat ?? 0;
+      let lng = input.lng ?? directAddPrefill.lng ?? 0;
+      if (lat === 0 && lng === 0) {
+        const coords = await geocode(input.name, input.address);
+        lat = coords.lat;
+        lng = coords.lng;
+      }
+
+      const id = doc(collection(db, "itineraries", selectedTripId, "stops")).id;
+      const dayStops = stops
+        .filter((s) => s.day === directAddPrefill.day)
+        .sort((a, b) => a.orderIndex - b.orderIndex);
+
+      const newStop: StopModel = {
+        id,
+        orderIndex: dayStops.length,
+        day: directAddPrefill.day,
+        timeLabel: (input.timeLabel || "").toLowerCase() || null,
+        duration: input.duration || null,
+        placeId: input.placeId ?? directAddPrefill.placeId ?? "",
+        name: input.name,
+        address: input.address,
+        photoUrl: directAddPrefill.photoUrl ?? null,
+        lat,
+        lng,
+        rating: input.rating ?? directAddPrefill.rating ?? null,
+        userRatingCount: input.userRatingCount ?? directAddPrefill.userRatingCount ?? null,
+        types: directAddPrefill.types ?? [],
+        briefSummary: null,
+        travelMode: null,
+        travelMinutes: null,
+        category: null,
+      };
+
+      await saveStop(selectedTripId, newStop);
+
+      // Increment stopCount on the itinerary
+      await updateDoc(doc(db, "itineraries", selectedTripId), {
+        stopCount: increment(1),
+        updatedAt: new Date().toISOString(),
+      });
+
+      // Recompute travel for the day
+      await persistTravelForDay(selectedTripId, [...dayStops, newStop]);
+
+      setAddModalVisible(false);
+      setDirectAddPrefill(null);
+    },
+    [selectedTripId, directAddPrefill, stops]
+  );
+
   // ─── View-mode flat data ─────────────────────────────────────────────────────
 
   const viewFlatData: FlatItem[] = useMemo(() => {
@@ -529,10 +634,12 @@ export default function ItineraryTab() {
         onClose={() => {
           setAddModalVisible(false);
           setPendingAddSlot(undefined);
+          setDirectAddPrefill(null);
         }}
-        onAdd={handleEditAddActivity}
+        onAdd={directAddPrefill ? handleDirectAdd : handleEditAddActivity}
         defaultTimeLabel={pendingAddSlot}
         locationBias={routeCenter}
+        prefill={directAddPrefill ?? undefined}
       />
     </View>
   );

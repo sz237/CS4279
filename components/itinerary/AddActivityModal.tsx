@@ -62,12 +62,23 @@ function formatDuration(minutes: number | null): string {
   return m === 0 ? `${h} hr` : `${h} hr ${m} min`;
 }
 
+export interface ActivityPrefill {
+  name: string;
+  address: string;
+  placeId?: string;
+  lat?: number;
+  lng?: number;
+  rating?: number;
+  userRatingCount?: number;
+}
+
 interface AddActivityModalProps {
   visible: boolean;
   onClose: () => void;
   onAdd: (input: ManualStopInput) => void;
   defaultTimeLabel?: string;
   locationBias?: { lat: number; lng: number };
+  prefill?: ActivityPrefill;
 }
 
 export default function AddActivityModal({
@@ -76,6 +87,7 @@ export default function AddActivityModal({
   onAdd,
   defaultTimeLabel,
   locationBias,
+  prefill,
 }: AddActivityModalProps) {
   const [entryMode, setEntryMode] = useState<EntryMode>("search");
 
@@ -97,13 +109,28 @@ export default function AddActivityModal({
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    if (visible && defaultTimeLabel) {
+    if (!visible) return;
+    if (defaultTimeLabel) {
       const match = TIME_OPTIONS.find(
         (o) => o.toLowerCase() === defaultTimeLabel.toLowerCase()
       );
       setTimeLabel(match ?? "");
     }
-  }, [visible, defaultTimeLabel]);
+    if (prefill) {
+      setEntryMode("search");
+      setSearchQuery(prefill.name);
+      setSearchAddress(prefill.address);
+      setSelectedPlace({
+        id: prefill.placeId ?? "",
+        name: prefill.name,
+        address: prefill.address,
+        lat: prefill.lat ?? 0,
+        lng: prefill.lng ?? 0,
+        rating: prefill.rating,
+        userRatingCount: prefill.userRatingCount,
+      });
+    }
+  }, [visible, defaultTimeLabel, prefill]);
 
   useEffect(() => {
     if (!visible) {

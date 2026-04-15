@@ -11,7 +11,13 @@ type PlaceTextSearchResult = {
   location?: { latitude: number; longitude: number };
   rating?: number;
   userRatingCount?: number;
+  photos?: { name: string }[];
+  types?: string[];
 };
+
+export function buildPlacePhotoUrl(photoName: string, maxWidthPx = 1200): string {
+  return `https://places.googleapis.com/v1/${photoName}/media?key=${API_KEY ?? ""}&maxWidthPx=${maxWidthPx}`;
+}
 
 export async function placesTextSearch(
   query: string,
@@ -38,7 +44,7 @@ export async function placesTextSearch(
       "Content-Type": "application/json",
       "X-Goog-Api-Key": API_KEY || "",
       "X-Goog-FieldMask":
-        "places.id,places.displayName,places.formattedAddress,places.location,places.rating,places.userRatingCount",
+        "places.id,places.displayName,places.formattedAddress,places.location,places.rating,places.userRatingCount,places.photos,places.types",
     },
     body: JSON.stringify(body),
   });

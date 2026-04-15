@@ -197,7 +197,7 @@ export default function ItineraryLayout() {
 
   // Redirect bare /itinerary -> /itinerary/overview
   useEffect(() => {
-    const validSegs: string[] = ["overview", "activities", "explore"];
+    const validSegs: string[] = ["overview", "itinerary", "explore"];
     if (!validSegs.includes(activeSeg ?? "")) {
       router.replace("/(tabs)/itinerary/overview" as never);
     }
