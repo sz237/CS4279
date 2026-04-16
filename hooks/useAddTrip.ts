@@ -30,7 +30,7 @@ export function formatDateRange(start: string, end: string): string {
     "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
   ];
   const s = new Date(start + "T00:00:00");
-  if (!end) return `${SHORT[s.getMonth()]} ${s.getDate()}`;
+  if (!end || end === start) return `${SHORT[s.getMonth()]} ${s.getDate()}`;
   const e = new Date(end + "T00:00:00");
   if (s.getMonth() === e.getMonth()) {
     return `${SHORT[s.getMonth()]} ${s.getDate()}-${e.getDate()}`;
@@ -61,8 +61,9 @@ export function useAddTrip() {
   const interests = useMemo(() => parseInterests(interestsRaw), [interestsRaw]);
 
   const handleDateConfirm = useCallback((departure: Date, returnD?: Date) => {
-    setStartDate(toISODate(departure));
-    setEndDate(returnD ? toISODate(returnD) : "");
+    const start = toISODate(departure);
+    setStartDate(start);
+    setEndDate(returnD ? toISODate(returnD) : start);
     setDatePickerVisible(false);
   }, []);
 

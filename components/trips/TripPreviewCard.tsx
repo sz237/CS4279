@@ -51,10 +51,12 @@ function statusLabel(status: ItineraryModel["status"]) {
 
 type Props = {
   trip: ItineraryModel;
+  currentUid?: string;
   selecting?: boolean;
   selected?: boolean;
   onToggleSelect?: () => void;
   onPress?: () => void;
+  onMenuPress?: () => void;
 
   showFooter?: boolean;
   rating?: number;
@@ -65,16 +67,19 @@ type Props = {
 
 export function TripPreviewCard({
   trip,
+  currentUid,
   selecting = false,
   selected = false,
   onToggleSelect,
   onPress,
+  onMenuPress,
   showFooter = false,
   rating = 0,
   canRate = true,
   onChangeRating,
   onShareTrip,
 }: Props) {
+  const myPrivacy = currentUid ? (trip.memberPrivacy?.[currentUid] ?? "friends") : null;
   const [coverUrl, setCoverUrl] = useState<string | null>(
     trip.imageUrl ?? trip.coverImageUrl ?? null
   );
@@ -214,31 +219,74 @@ export function TripPreviewCard({
               >
                 {trip.stopCount ?? trip.stops?.length ?? 0} stops
               </Text>
+
+              {(myPrivacy === "private" || myPrivacy === "friends") && (
+                <View style={{
+                  marginTop: 10,
+                  alignSelf: "flex-start",
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 4,
+                  paddingHorizontal: 8,
+                  paddingVertical: 4,
+                  borderRadius: 6,
+                  backgroundColor: coverUrl ? "rgba(0,0,0,0.35)" : "#F3F4F6",
+                }}>
+                  <Ionicons
+                    name={myPrivacy === "private" ? "lock-closed" : "people-outline"}
+                    size={10}
+                    color={coverUrl ? "#FFFFFF" : "#6B7280"}
+                  />
+                  <Text style={{
+                    fontSize: 11,
+                    fontWeight: "600",
+                    color: coverUrl ? "#FFFFFF" : "#6B7280",
+                  }}>
+                    {myPrivacy === "private" ? "Only you" : "Friends only"}
+                  </Text>
+                </View>
+              )}
             </View>
 
-            <TouchableOpacity
-              onPress={(e: any) => {
-                e?.stopPropagation?.();
-                handleChangePhoto();
-              }}
-              activeOpacity={0.85}
-              style={{
-                backgroundColor: UI.colors.overlayLight,
-                borderRadius: UI.radius.pill,
-                paddingHorizontal: 12,
-                paddingVertical: 8,
-              }}
-            >
-              <Text
+            {onMenuPress ? (
+              <TouchableOpacity
+                onPress={(e: any) => { e?.stopPropagation?.(); onMenuPress(); }}
+                activeOpacity={0.7}
+                hitSlop={8}
                 style={{
-                  fontSize: UI.type.body,
-                  fontWeight: "500",
-                  color: UI.colors.brand,
+                  width: 32,
+                  height: 32,
+                  borderRadius: 16,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  backgroundColor: coverUrl ? "rgba(0,0,0,0.28)" : "rgba(0,0,0,0.06)",
                 }}
               >
-                {changingPhoto ? "Updating..." : "Change Photo"}
-              </Text>
-            </TouchableOpacity>
+                <Ionicons
+                  name="ellipsis-horizontal"
+                  size={16}
+                  color={coverUrl ? "#FFFFFF" : UI.colors.textPrimary}
+                />
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                onPress={(e: any) => {
+                  e?.stopPropagation?.();
+                  handleChangePhoto();
+                }}
+                activeOpacity={0.85}
+                style={{
+                  backgroundColor: UI.colors.overlayLight,
+                  borderRadius: UI.radius.pill,
+                  paddingHorizontal: 12,
+                  paddingVertical: 8,
+                }}
+              >
+                <Text style={{ fontSize: UI.type.body, fontWeight: "500", color: UI.colors.brand }}>
+                  {changingPhoto ? "Updating..." : "Change Photo"}
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
 
           {shouldShowRatingFooter ? (

@@ -9,6 +9,7 @@ import {
   setTripMeta,
   type LocalTripMeta,
 } from "@/src/services/profile";
+import { updateItinerary } from "@/src/services/trips";
 import { UI } from "@/src/theme/ui";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
@@ -16,12 +17,34 @@ import { useRouter } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 import {
   Alert,
+  Modal,
+  Pressable,
   ScrollView,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+
+type VisibilityOption = "public" | "friends" | "private";
+
+function visibilityLabel(v: VisibilityOption) {
+  if (v === "public") return "Public";
+  if (v === "friends") return "Friends Only";
+  return "Only you";
+}
+
+function visibilityIcon(v: VisibilityOption): any {
+  if (v === "public") return "globe-outline";
+  if (v === "friends") return "people-outline";
+  return "lock-closed-outline";
+}
+
+function visibilityDescription(v: VisibilityOption) {
+  if (v === "public") return "Anyone viewing your profile can see this";
+  if (v === "friends") return "Only your friends can see this";
+  return "Only visible to you";
+}
 
 function isEndedTrip(endDate: string) {
   const today = new Date().toISOString().slice(0, 10);
@@ -34,37 +57,37 @@ export default function MyTripsScreen() {
   const { trips, selectTrip } = useTrips();
 
   const [tripMeta, setTripMetaState] = useState<Record<string, LocalTripMeta>>({});
-  const [selectedIds, setSelectedIds] = useState<Record<string, boolean>>({});
-  const [selecting, setSelecting] = useState(false);
   const [loadingMeta, setLoadingMeta] = useState(true);
-  const [deleting, setDeleting] = useState(false);
 
-  const sortedTrips = useMemo(
-    () => [...trips].sort((a, b) => (a.startDate ?? "").localeCompare(b.startDate ?? "")),
-    [trips]
-  );
+  // Drawer state
+  const [drawerTripId, setDrawerTripId] = useState<string | null>(null);
+  const [drawerVisible, setDrawerVisible] = useState(false);
+  const [draftVisibility, setDraftVisibility] = useState<VisibilityOption>("friends");
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const sortedTrips = useMemo(() => {
+    const groupOrder = { upcoming: 0, current: 1, past: 2 };
+    return [...trips].sort((a, b) => {
+      if (a.status !== b.status) return groupOrder[a.status] - groupOrder[b.status];
+      if (a.status === "past") return b.startDate.localeCompare(a.startDate);
+      if (a.status === "current") return a.endDate.localeCompare(b.endDate);
+      return a.startDate.localeCompare(b.startDate); // upcoming
+    });
+  }, [trips]);
 
   const loadMeta = useCallback(async () => {
     try {
       setLoadingMeta(true);
-
       const metaMap = await getTripMetaMap();
       const mergedMeta: Record<string, LocalTripMeta> = { ...metaMap };
-
       for (const trip of sortedTrips) {
         if (!mergedMeta[trip.id]) {
-          mergedMeta[trip.id] = {
-            rating: 0,
-            shareUrl: generateTripShareLink(trip.id),
-          };
+          mergedMeta[trip.id] = { rating: 0, shareUrl: generateTripShareLink(trip.id) };
         } else if (!mergedMeta[trip.id].shareUrl) {
-          mergedMeta[trip.id] = {
-            ...mergedMeta[trip.id],
-            shareUrl: generateTripShareLink(trip.id),
-          };
+          mergedMeta[trip.id] = { ...mergedMeta[trip.id], shareUrl: generateTripShareLink(trip.id) };
         }
       }
-
       setTripMetaState(mergedMeta);
     } catch (error: any) {
       Alert.alert("Load failed", error?.message ?? "Could not load trips.");
@@ -73,100 +96,85 @@ export default function MyTripsScreen() {
     }
   }, [sortedTrips]);
 
-  useFocusEffect(
-    useCallback(() => {
-      loadMeta();
-    }, [loadMeta])
-  );
-
-  const selectedTripIds = useMemo(
-    () => Object.keys(selectedIds).filter((id) => selectedIds[id]),
-    [selectedIds]
-  );
-
-  const allSelected =
-    sortedTrips.length > 0 && selectedTripIds.length === sortedTrips.length;
-
-  const toggleSelect = (id: string) => {
-    if (!selecting) return;
-    setSelectedIds((prev) => ({ ...prev, [id]: !prev[id] }));
-  };
-
-  const selectAll = () => {
-    const next: Record<string, boolean> = {};
-    for (const trip of sortedTrips) next[trip.id] = true;
-    setSelectedIds(next);
-  };
-
-  const clearSelection = () => setSelectedIds({});
+  useFocusEffect(useCallback(() => { loadMeta(); }, [loadMeta]));
 
   const updateTripMeta = async (tripId: string, next: LocalTripMeta) => {
     setTripMetaState((prev) => ({ ...prev, [tripId]: next }));
     await setTripMeta(tripId, next);
   };
 
-  const startSelecting = () => {
-    setSelecting(true);
-    setSelectedIds({});
-  };
-
-  const cancelSelecting = () => {
-    setSelecting(false);
-    setSelectedIds({});
-  };
-
   const openTrip = (tripId: string) => {
     selectTrip(tripId);
-    router.push({
-      pathname: "/(tabs)/itinerary/overview",
-      params: { from: "my-trips" },
-    });
+    router.push({ pathname: "/(tabs)/itinerary/overview", params: { from: "my-trips" } });
   };
 
   const currentUid = auth.currentUser?.uid ?? null;
 
-  const ownedSelectedTripIds = useMemo(
-    () =>
-      sortedTrips
-        .filter((trip) => selectedIds[trip.id] && trip.ownerUid === currentUid)
-        .map((trip) => trip.id),
-    [sortedTrips, selectedIds, currentUid]
-  );
+  const openTripMenu = (tripId: string) => {
+    const trip = sortedTrips.find((t) => t.id === tripId);
+    if (!trip || !currentUid) return;
+    const current = (trip.memberPrivacy?.[currentUid] as VisibilityOption) ?? "friends";
+    setDrawerTripId(tripId);
+    setDraftVisibility(current);
+    setDropdownOpen(false);
+    setDrawerVisible(true);
+  };
 
-  const nonOwnedSelectedCount = selectedTripIds.length - ownedSelectedTripIds.length;
+  const closeDrawer = () => {
+    setDrawerVisible(false);
+    setDropdownOpen(false);
+    setDrawerTripId(null);
+  };
 
-  const deleteSelected = async () => {
-    if (ownedSelectedTripIds.length === 0) return;
+  const handleUpdateTrip = async () => {
+    if (!drawerTripId || !currentUid) return;
+    const trip = sortedTrips.find((t) => t.id === drawerTripId);
+    if (!trip) return;
+    try {
+      setSaving(true);
+      await updateItinerary(drawerTripId, {
+        memberPrivacy: { ...(trip.memberPrivacy ?? {}), [currentUid]: draftVisibility },
+      });
+      closeDrawer();
+    } catch (e: any) {
+      Alert.alert("Error", e?.message ?? "Could not update visibility.");
+    } finally {
+      setSaving(false);
+    }
+  };
 
-    const message =
-      nonOwnedSelectedCount > 0
-        ? `Delete ${ownedSelectedTripIds.length} owned selected trip(s)? ${nonOwnedSelectedCount} selected trip(s) are not owned by you and will not be deleted.`
-        : `Delete ${ownedSelectedTripIds.length} selected trip(s)?`;
-
-    Alert.alert("Delete trips", message, [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            setDeleting(true);
-            await deleteOwnedItineraries(ownedSelectedTripIds);
-            await deleteTripMetaMany(ownedSelectedTripIds);
-            setSelectedIds({});
-            setSelecting(false);
-          } catch (error: any) {
-            Alert.alert("Delete failed", error?.message ?? "Please try again.");
-          } finally {
-            setDeleting(false);
-          }
+  const handleDeleteTrip = () => {
+    const trip = sortedTrips.find((t) => t.id === drawerTripId);
+    if (!trip || !currentUid) return;
+    if (trip.ownerUid !== currentUid) {
+      Alert.alert("Can't delete", "You can only delete trips you created.");
+      return;
+    }
+    Alert.alert(
+      "Delete trip",
+      "This will permanently delete the trip for all members. This action cannot be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await deleteOwnedItineraries([drawerTripId!]);
+              await deleteTripMetaMany([drawerTripId!]);
+              closeDrawer();
+            } catch (e: any) {
+              Alert.alert("Delete failed", e?.message ?? "Please try again.");
+            }
+          },
         },
-      },
-    ]);
+      ]
+    );
   };
 
   return (
     <View className="flex-1" style={{ backgroundColor: UI.colors.pageBg }}>
+      {/* Header */}
       <View
         style={{
           paddingTop: insets.top - 48,
@@ -177,85 +185,37 @@ export default function MyTripsScreen() {
           borderBottomColor: UI.colors.cardBorder,
         }}
       >
-        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-          <View>
-            <Text
-              style={{
-                fontSize: UI.type.pageTitle,
-                fontWeight: "800",
-                color: UI.colors.textPrimary,
-              }}
-            >
-              My Trips
-            </Text>
-            <Text style={{ marginTop: 4, fontSize: UI.type.body, color: UI.colors.textSecondary }}>
-              {sortedTrips.length} total
-            </Text>
-          </View>
-
-          <TouchableOpacity
-            onPress={selecting ? cancelSelecting : startSelecting}
-            activeOpacity={0.85}
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              justifyContent: "center",
-              backgroundColor: UI.colors.cardBg,
-              borderRadius: UI.radius.button,
-              paddingHorizontal: 16,
-              paddingVertical: UI.spacing.buttonPaddingY,
-              borderWidth: 1,
-              borderColor: UI.colors.cardBorder,
-            }}
-          >
-            <Ionicons
-              name={selecting ? "close-circle-outline" : "checkmark-done-outline"}
-              size={18}
-              color={UI.colors.textPrimary}
-            />
-            <Text
-              style={{
-                marginLeft: 8,
-                fontSize: UI.type.body,
-                fontWeight: "500",
-                color: UI.colors.textPrimary,
-              }}
-            >
-              {selecting ? "Cancel" : "Select Trips"}
-            </Text>
-          </TouchableOpacity>
-        </View>
+        <Text style={{ fontSize: 24, fontWeight: "600", color: UI.colors.textPrimary }}>
+          My Trips
+        </Text>
+        <Text style={{ marginTop: 4, fontSize: UI.type.body, color: UI.colors.textSecondary }}>
+          {sortedTrips.length} total
+        </Text>
       </View>
 
+      {/* Trip list */}
       <ScrollView
         className="flex-1"
         style={{ backgroundColor: UI.colors.pageBg }}
         contentContainerStyle={{
           paddingHorizontal: UI.spacing.pageX,
           paddingTop: 16,
-          paddingBottom: selecting ? 84 : UI.spacing.pageBottom,
+          paddingBottom: UI.spacing.pageBottom,
         }}
       >
         {sortedTrips.map((trip) => {
-          const meta = tripMeta[trip.id] ?? {
-            rating: 0,
-            shareUrl: generateTripShareLink(trip.id),
-          };
-
+          const meta = tripMeta[trip.id] ?? { rating: 0, shareUrl: generateTripShareLink(trip.id) };
           return (
             <TripPreviewCard
               key={trip.id}
               trip={trip}
-              selecting={selecting}
-              selected={!!selectedIds[trip.id]}
-              onToggleSelect={() => toggleSelect(trip.id)}
+              currentUid={currentUid ?? undefined}
               onPress={() => openTrip(trip.id)}
+              onMenuPress={() => openTripMenu(trip.id)}
               showFooter
               rating={meta.rating}
               canRate={isEndedTrip(trip.endDate)}
-              onChangeRating={(value) =>
-                updateTripMeta(trip.id, { ...meta, rating: value })
-              }
+              onChangeRating={(value) => updateTripMeta(trip.id, { ...meta, rating: value })}
             />
           );
         })}
@@ -271,93 +231,208 @@ export default function MyTripsScreen() {
         ) : null}
       </ScrollView>
 
-      {selecting ? (
-        <View
-          style={{
-            paddingBottom: Math.max(insets.bottom, 6),
-            backgroundColor: UI.colors.cardBg,
-            borderTopWidth: 1,
-            borderTopColor: UI.colors.cardBorder,
-            paddingHorizontal: 16,
-            paddingTop: 8,
-          }}
-        >
-          <View style={{ flexDirection: "row", gap: 12 }}>
+      {/* Visibility drawer */}
+      <Modal
+        visible={drawerVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={closeDrawer}
+      >
+        <View style={{ flex: 1 }}>
+          {/* Backdrop */}
+          <Pressable
+            style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.4)" }}
+            onPress={closeDrawer}
+          />
+
+          {/* Sheet */}
+          <View
+            style={{
+              backgroundColor: UI.colors.pageBg,
+              borderTopLeftRadius: 24,
+              borderTopRightRadius: 24,
+              paddingHorizontal: 24,
+              paddingTop: 12,
+              paddingBottom: Math.max(insets.bottom, 16) + 8,
+            }}
+          >
+            {/* Handle */}
+            <View
+              style={{
+                width: 40,
+                height: 4,
+                backgroundColor: "#D1D5DB",
+                borderRadius: 2,
+                alignSelf: "center",
+                marginBottom: 24,
+              }}
+            />
+
+            <Text
+              style={{
+                fontSize: 22,
+                fontWeight: "700",
+                color: UI.colors.textPrimary,
+                marginBottom: 24,
+              }}
+            >
+              Visibility
+            </Text>
+
+            <Text
+              style={{
+                fontSize: 13,
+                fontWeight: "700",
+                color: UI.colors.textPrimary,
+                letterSpacing: 0.4,
+                marginBottom: 8,
+                textTransform: "uppercase",
+              }}
+            >
+              Who can view
+            </Text>
+
+            {/* Dropdown trigger */}
             <TouchableOpacity
-              onPress={allSelected ? clearSelection : selectAll}
+              onPress={() => setDropdownOpen((v) => !v)}
               activeOpacity={0.85}
               style={{
-                flex: 1,
                 flexDirection: "row",
                 alignItems: "center",
-                justifyContent: "center",
-                borderRadius: UI.radius.button,
-                backgroundColor: UI.colors.cardBg,
-                paddingVertical: 12,
                 borderWidth: 1,
-                borderColor: UI.colors.cardBorder,
+                borderColor: dropdownOpen ? UI.colors.brand : UI.colors.cardBorder,
+                borderRadius: 14,
+                paddingHorizontal: 16,
+                paddingVertical: 14,
+                backgroundColor: UI.colors.cardBg,
               }}
             >
               <Ionicons
-                name={allSelected ? "remove-circle-outline" : "checkbox-outline"}
-                size={18}
-                color={UI.colors.textPrimary}
+                name={visibilityIcon(draftVisibility)}
+                size={20}
+                color={UI.colors.textSecondary}
+                style={{ marginRight: 10 }}
               />
-              <Text
+              <Text style={{ flex: 1, fontSize: 16, color: UI.colors.textPrimary, fontWeight: "500" }}>
+                {visibilityLabel(draftVisibility)}
+              </Text>
+              <Ionicons
+                name={dropdownOpen ? "chevron-up" : "chevron-down"}
+                size={18}
+                color={UI.colors.textSecondary}
+              />
+            </TouchableOpacity>
+
+            {/* Dropdown options */}
+            {dropdownOpen && (
+              <View
                 style={{
-                  marginLeft: 8,
-                  fontSize: UI.type.body,
-                  fontWeight: "500",
-                  color: UI.colors.textPrimary,
+                  borderWidth: 1,
+                  borderColor: UI.colors.cardBorder,
+                  borderRadius: 14,
+                  marginTop: 6,
+                  overflow: "hidden",
+                  backgroundColor: UI.colors.cardBg,
                 }}
               >
-                {allSelected ? "Clear Selection" : "Select All"}
+                {(["public", "friends", "private"] as VisibilityOption[]).map((opt, i) => (
+                  <TouchableOpacity
+                    key={opt}
+                    activeOpacity={0.8}
+                    onPress={() => { setDraftVisibility(opt); setDropdownOpen(false); }}
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      paddingHorizontal: 16,
+                      paddingVertical: 14,
+                      backgroundColor:
+                        draftVisibility === opt ? UI.colors.brandSoft : UI.colors.cardBg,
+                      borderTopWidth: i > 0 ? 1 : 0,
+                      borderTopColor: UI.colors.cardBorder,
+                    }}
+                  >
+                    <View
+                      style={{
+                        width: 36,
+                        height: 36,
+                        borderRadius: 18,
+                        backgroundColor:
+                          draftVisibility === opt ? UI.colors.brand : "#F3F4F6",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        marginRight: 12,
+                      }}
+                    >
+                      <Ionicons
+                        name={visibilityIcon(opt)}
+                        size={17}
+                        color={draftVisibility === opt ? "#FFFFFF" : UI.colors.textSecondary}
+                      />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text
+                        style={{
+                          fontSize: 15,
+                          fontWeight: "600",
+                          color: draftVisibility === opt ? UI.colors.brand : UI.colors.textPrimary,
+                        }}
+                      >
+                        {visibilityLabel(opt)}
+                      </Text>
+                      <Text style={{ fontSize: 12, color: UI.colors.textMuted, marginTop: 2 }}>
+                        {visibilityDescription(opt)}
+                      </Text>
+                    </View>
+                    {draftVisibility === opt && (
+                      <Ionicons name="checkmark-circle" size={20} color={UI.colors.brand} />
+                    )}
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+
+            {/* Spacer */}
+            <View style={{ height: 32 }} />
+
+            {/* Delete ghost button */}
+            <TouchableOpacity
+              onPress={handleDeleteTrip}
+              activeOpacity={0.7}
+              style={{ alignItems: "center", paddingVertical: 14 }}
+            >
+              <Text style={{ fontSize: 15, fontWeight: "600", color: UI.colors.danger }}>
+                Delete Trip
               </Text>
             </TouchableOpacity>
 
+            {/* Divider */}
+            <View
+              style={{
+                height: 1,
+                backgroundColor: UI.colors.cardBorder,
+                marginVertical: 12,
+              }}
+            />
+
+            {/* Update CTA */}
             <TouchableOpacity
-              onPress={deleteSelected}
-              disabled={ownedSelectedTripIds.length === 0 || deleting}
+              onPress={handleUpdateTrip}
+              disabled={saving}
               activeOpacity={0.85}
               style={{
-                flex: 1,
-                flexDirection: "row",
+                backgroundColor: saving ? UI.colors.disabledBg : UI.colors.brand,
+                borderRadius: 30,
+                paddingVertical: 16,
                 alignItems: "center",
-                justifyContent: "center",
-                borderRadius: UI.radius.button,
-                paddingVertical: 12,
-                backgroundColor:
-                  ownedSelectedTripIds.length === 0 || deleting
-                    ? UI.colors.disabledBg
-                    : UI.colors.dangerSoft,
               }}
             >
-              <Ionicons
-                name="trash-outline"
-                size={18}
-                color={
-                  ownedSelectedTripIds.length === 0 || deleting
-                    ? UI.colors.disabledText
-                    : UI.colors.danger
-                }
-              />
-              <Text
-                style={{
-                  marginLeft: 8,
-                  fontSize: UI.type.body,
-                  fontWeight: "500",
-                  color:
-                    ownedSelectedTripIds.length === 0 || deleting
-                      ? UI.colors.disabledText
-                      : UI.colors.danger,
-                }}
-              >
-                {deleting ? "Deleting..." : "Delete"}
+              <Text style={{ fontSize: 16, fontWeight: "700", color: "#FFFFFF" }}>
+                {saving ? "Saving…" : "Update Trip"}
               </Text>
             </TouchableOpacity>
           </View>
         </View>
-      ) : null}
+      </Modal>
     </View>
   );
 }

@@ -45,6 +45,12 @@ export interface ItineraryModel {
   // Quick count (avoids reading subcollection just for a length)
   stopCount: number;
 
+  // Per-member visibility on their own profile.
+  // Each member independently sets whether this trip shows on their profile.
+  // "public" = anyone can see it; "friends" = friends only; "private" = only you.
+  // Defaults to "friends" when not set.
+  memberPrivacy?: Record<string, "public" | "friends" | "private">;
+
   createdAt: string; // ISO timestamp
   updatedAt: string; // ISO timestamp
 }

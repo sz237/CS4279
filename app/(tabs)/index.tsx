@@ -33,17 +33,17 @@ export default function HomeScreen() {
       style={{ backgroundColor: UI.colors.pageBg }}
       contentContainerStyle={{
         paddingHorizontal: 24,
-        paddingTop: insets.top + 16,
+        paddingTop: insets.top + 28,
         paddingBottom: 32,
       }}
       showsVerticalScrollIndicator={false}
     >
       <Text
         style={{
-          fontSize: UI.type.pageTitle,
-          fontWeight: "800",
+          fontSize: 24,
+          fontWeight: "600",
           color: UI.colors.textPrimary,
-          marginBottom: 24,
+          marginBottom: 12,
         }}
       >
         Trips

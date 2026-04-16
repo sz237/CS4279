@@ -189,6 +189,14 @@ export async function findItineraryByCode(
   return snap.docs[0].data() as ItineraryModel;
 }
 
+function makeInterestTagId(label: string): string {
+  return label
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "-")
+    .replace(/[^a-z0-9-]/g, "");
+}
+
 /**
  * Find an itinerary by its invite code and add the current user as an editor.
  * Returns the itinerary if found, null if the code is invalid.
@@ -210,13 +218,43 @@ export async function joinItineraryByCode(
 
   const ref = snap.docs[0].ref;
   const itinerary = snap.docs[0].data() as ItineraryModel;
+  const now = new Date().toISOString();
+
+  // Merge selectedInterests into interestTags so they appear on the overview
+  const existingTags = itinerary.interestTags ?? [];
+  const updatedTags = [...existingTags];
+
+  for (const label of selectedInterests) {
+    const trimmed = label.trim();
+    if (!trimmed) continue;
+    const id = makeInterestTagId(trimmed);
+    const idx = updatedTags.findIndex((t) => t.id === id);
+    if (idx >= 0) {
+      // Tag already exists — add this user's vote if not already there
+      if (!updatedTags[idx].voterUids.includes(user.uid)) {
+        updatedTags[idx] = {
+          ...updatedTags[idx],
+          voterUids: [...updatedTags[idx].voterUids, user.uid],
+          updatedAt: now,
+        };
+      }
+    } else {
+      updatedTags.push({
+        id,
+        label: trimmed,
+        voterUids: [user.uid],
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+  }
 
   if (itinerary.memberUids.includes(user.uid)) {
     await updateDoc(ref, {
       [`memberInterestsByUid.${user.uid}`]: selectedInterests,
-      updatedAt: new Date().toISOString(),
+      interestTags: updatedTags,
+      updatedAt: now,
     });
-
     return itinerary;
   }
 
@@ -224,7 +262,8 @@ export async function joinItineraryByCode(
     memberUids: arrayUnion(user.uid),
     memberUsernames: arrayUnion(user.displayName ?? user.email ?? ""),
     [`memberInterestsByUid.${user.uid}`]: selectedInterests,
-    updatedAt: new Date().toISOString(),
+    interestTags: updatedTags,
+    updatedAt: now,
   });
 
   return itinerary;
@@ -447,6 +486,7 @@ export async function saveAiItinerary(
     accommodation: null,
     notes: null,
     stopCount: allActivities.length,
+    interestTags: [],
     createdAt: now,
     updatedAt: now,
   };
