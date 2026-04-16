@@ -43,6 +43,7 @@ export default function OverviewScreen() {
   const [friends, setFriends] = useState<FriendItem[]>([]);
   const [friendsLoading, setFriendsLoading] = useState(false);
   const [addingUid, setAddingUid] = useState<string | null>(null);
+  const [removingUid, setRemovingUid] = useState<string | null>(null);
 
   const openManage = async () => {
     setManageVisible(true);
@@ -67,6 +68,27 @@ export default function OverviewScreen() {
       Alert.alert("Error", err?.message ?? "Could not add friend.");
     } finally {
       setAddingUid(null);
+    }
+  };
+
+  const handleRemoveMember = async (friend: FriendItem) => {
+    if (!trip) return;
+    setRemovingUid(friend.uid);
+    try {
+      const idx = (trip.memberUids ?? []).indexOf(friend.uid);
+      if (idx === -1) return;
+      const nextUids = [...(trip.memberUids ?? [])];
+      const nextUsernames = [...(trip.memberUsernames ?? [])];
+      nextUids.splice(idx, 1);
+      nextUsernames.splice(idx, 1);
+      await updateItinerary(trip.id, {
+        memberUids: nextUids,
+        memberUsernames: nextUsernames,
+      });
+    } catch (err: any) {
+      Alert.alert("Error", err?.message ?? "Could not remove member.");
+    } finally {
+      setRemovingUid(null);
     }
   };
 
@@ -502,7 +524,7 @@ async function handleAddInterest(rawLabel: string) {
 
       </ScrollView>
 
-      {/* ── Add Friends Modal ── */}
+      {/* ── Manage Members Modal ── */}
       <Modal visible={manageVisible} animationType="slide" onRequestClose={() => setManageVisible(false)}>
         <View style={{ flex: 1, backgroundColor: UI.colors.pageBg }}>
 
@@ -518,86 +540,162 @@ async function handleAddInterest(rawLabel: string) {
             backgroundColor: UI.colors.cardBg,
           }}>
             <Text style={{ flex: 1, fontSize: 18, fontWeight: "700", color: UI.colors.textPrimary }}>
-              Add Friends to Trip
+              Manage Members
             </Text>
             <Pressable onPress={() => setManageVisible(false)} hitSlop={8}>
               <Ionicons name="close" size={24} color={UI.colors.textMuted} />
             </Pressable>
           </View>
 
-          <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 24 }}>
-            {friendsLoading ? (
-              <Text style={{ color: UI.colors.textMuted, fontSize: 14, textAlign: "center", marginTop: 40 }}>
-                Loading friends…
-              </Text>
-            ) : friends.length === 0 ? (
-              <View style={{ alignItems: "center", marginTop: 48, gap: 12 }}>
-                <Ionicons name="people-outline" size={44} color="#D1D5DB" />
-                <Text style={{ fontSize: 15, color: UI.colors.textMuted, textAlign: "center" }}>
-                  You haven't added any friends yet.{"\n"}Search for users in the Search tab!
-                </Text>
-              </View>
-            ) : (
-              <View style={{
-                backgroundColor: UI.colors.cardBg,
-                borderColor: UI.colors.cardBorder,
-                borderWidth: 1,
-                borderRadius: UI.radius.card,
-                overflow: "hidden",
-                ...UI.shadow.card,
-              }}>
-                {friends.filter(Boolean).map((friend, index) => {
-                  const alreadyAdded = (trip?.memberUids ?? []).includes(friend.uid);
-                  const isBusy = addingUid === friend.uid;
-                  const initials = initialsFromName(friend.displayName || friend.username);
+          <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 24, gap: 24 }}>
 
-                  return (
-                    <View key={friend.uid}>
-                      {index > 0 && <View style={{ height: 1, backgroundColor: "#F3F4F6" }} />}
-                      <View style={{ flexDirection: "row", alignItems: "center", padding: 14 }}>
+            {/* ── Section 1: Current group members ── */}
+            {(() => {
+              const memberUids = trip?.memberUids ?? [];
+              const memberUsernames = trip?.memberUsernames ?? [];
+              const friendsByUid = Object.fromEntries(friends.map((f) => [f.uid, f]));
+              const currentUid = auth.currentUser?.uid;
 
-                        {/* Avatar */}
-                        {friend.photoURL ? (
-                          <Image source={{ uri: friend.photoURL }} style={{ width: 46, height: 46, borderRadius: 23 }} />
-                        ) : (
-                          <View style={{ width: 46, height: 46, borderRadius: 23, backgroundColor: "#EEF2FF", alignItems: "center", justifyContent: "center" }}>
-                            <Text style={{ fontSize: 16, fontWeight: "700", color: UI.colors.brand }}>{initials}</Text>
+              return (
+                <View style={{ gap: 10 }}>
+                  <Text style={{ fontSize: 13, fontWeight: "700", color: UI.colors.textSecondary, textTransform: "uppercase", letterSpacing: 0.8 }}>
+                    Group Members ({memberUids.length})
+                  </Text>
+
+                  <View style={{
+                    backgroundColor: UI.colors.cardBg,
+                    borderColor: UI.colors.cardBorder,
+                    borderWidth: 1,
+                    borderRadius: UI.radius.card,
+                    overflow: "hidden",
+                    ...UI.shadow.card,
+                  }}>
+                    {memberUids.map((uid, index) => {
+                      const friend = friendsByUid[uid];
+                      const username = memberUsernames[index] ?? "Unknown";
+                      const displayName = friend?.displayName || username;
+                      const photoURL = friend?.photoURL ?? null;
+                      const initials = initialsFromName(displayName);
+                      const isCurrentUser = uid === currentUid;
+                      const isRemoving = removingUid === uid;
+
+                      const friendRecord: FriendItem = friend ?? { uid, username, displayName: username, photoURL: null };
+
+                      return (
+                        <View key={uid}>
+                          {index > 0 && <View style={{ height: 1, backgroundColor: "#F3F4F6" }} />}
+                          <View style={{ flexDirection: "row", alignItems: "center", padding: 14 }}>
+                            {photoURL ? (
+                              <Image source={{ uri: photoURL }} style={{ width: 44, height: 44, borderRadius: 22 }} />
+                            ) : (
+                              <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: "#EEF2FF", alignItems: "center", justifyContent: "center" }}>
+                                <Text style={{ fontSize: 15, fontWeight: "700", color: UI.colors.brand }}>{initials}</Text>
+                              </View>
+                            )}
+                            <View style={{ marginLeft: 12, flex: 1 }}>
+                              <Text style={{ fontSize: 15, fontWeight: "600", color: UI.colors.textPrimary }} numberOfLines={1}>
+                                {displayName}{isCurrentUser ? " (you)" : ""}
+                              </Text>
+                              <Text style={{ fontSize: 13, color: UI.colors.textSecondary, marginTop: 2 }}>
+                                @{username}
+                              </Text>
+                            </View>
+                            {!isCurrentUser && (
+                              <Pressable
+                                onPress={() => handleRemoveMember(friendRecord)}
+                                disabled={isRemoving}
+                                style={{ flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 8, backgroundColor: "#FEF2F2", borderWidth: 1, borderColor: "#FECACA", opacity: isRemoving ? 0.5 : 1 }}
+                              >
+                                <Ionicons name="remove-circle-outline" size={14} color="#EF4444" />
+                                <Text style={{ fontSize: 13, color: "#EF4444", fontWeight: "600" }}>
+                                  {isRemoving ? "Removing…" : "Remove"}
+                                </Text>
+                              </Pressable>
+                            )}
                           </View>
-                        )}
-
-                        {/* Name + username */}
-                        <View style={{ marginLeft: 12, flex: 1 }}>
-                          <Text style={{ fontSize: 15, fontWeight: "600", color: UI.colors.textPrimary }} numberOfLines={1}>
-                            {friend.displayName}
-                          </Text>
-                          <Text style={{ fontSize: 13, color: UI.colors.textSecondary, marginTop: 2 }}>
-                            @{friend.username}
-                          </Text>
                         </View>
+                      );
+                    })}
+                  </View>
+                </View>
+              );
+            })()}
 
-                        {/* Add / Added button */}
-                        {alreadyAdded ? (
-                          <View style={{ flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 8, backgroundColor: "#F3F4F6" }}>
-                            <Ionicons name="checkmark" size={14} color={UI.colors.textMuted} />
-                            <Text style={{ fontSize: 13, color: UI.colors.textMuted, fontWeight: "500" }}>Added</Text>
-                          </View>
-                        ) : (
-                          <Pressable
-                            onPress={() => handleAddFriend(friend)}
-                            disabled={isBusy}
-                            style={{ paddingHorizontal: 14, paddingVertical: 7, borderRadius: 8, backgroundColor: UI.colors.brand, opacity: isBusy ? 0.5 : 1 }}
-                          >
-                            <Text style={{ fontSize: 13, color: "#fff", fontWeight: "600" }}>
-                              {isBusy ? "Adding…" : "Add"}
-                            </Text>
-                          </Pressable>
-                        )}
-                      </View>
+            {/* ── Section 2: Add friends ── */}
+            {(() => {
+              const memberUids = trip?.memberUids ?? [];
+              const notAdded = friends.filter((f) => !memberUids.includes(f.uid));
+
+              return (
+                <View style={{ gap: 10 }}>
+                  <Text style={{ fontSize: 13, fontWeight: "700", color: UI.colors.textSecondary, textTransform: "uppercase", letterSpacing: 0.8 }}>
+                    Add Friends
+                  </Text>
+
+                  {friendsLoading ? (
+                    <Text style={{ color: UI.colors.textMuted, fontSize: 14, textAlign: "center", marginTop: 16 }}>
+                      Loading friends…
+                    </Text>
+                  ) : notAdded.length === 0 ? (
+                    <View style={{ alignItems: "center", paddingVertical: 28, gap: 10 }}>
+                      <Ionicons name="people-outline" size={36} color="#D1D5DB" />
+                      <Text style={{ fontSize: 14, color: UI.colors.textMuted, textAlign: "center" }}>
+                        {friends.length === 0
+                          ? "You haven't added any friends yet.\nSearch for users in the Search tab!"
+                          : "All your friends are already in this trip."}
+                      </Text>
                     </View>
-                  );
-                })}
-              </View>
-            )}
+                  ) : (
+                    <View style={{
+                      backgroundColor: UI.colors.cardBg,
+                      borderColor: UI.colors.cardBorder,
+                      borderWidth: 1,
+                      borderRadius: UI.radius.card,
+                      overflow: "hidden",
+                      ...UI.shadow.card,
+                    }}>
+                      {notAdded.map((friend, index) => {
+                        const isAdding = addingUid === friend.uid;
+                        const initials = initialsFromName(friend.displayName || friend.username);
+
+                        return (
+                          <View key={friend.uid}>
+                            {index > 0 && <View style={{ height: 1, backgroundColor: "#F3F4F6" }} />}
+                            <View style={{ flexDirection: "row", alignItems: "center", padding: 14 }}>
+                              {friend.photoURL ? (
+                                <Image source={{ uri: friend.photoURL }} style={{ width: 44, height: 44, borderRadius: 22 }} />
+                              ) : (
+                                <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: "#EEF2FF", alignItems: "center", justifyContent: "center" }}>
+                                  <Text style={{ fontSize: 15, fontWeight: "700", color: UI.colors.brand }}>{initials}</Text>
+                                </View>
+                              )}
+                              <View style={{ marginLeft: 12, flex: 1 }}>
+                                <Text style={{ fontSize: 15, fontWeight: "600", color: UI.colors.textPrimary }} numberOfLines={1}>
+                                  {friend.displayName}
+                                </Text>
+                                <Text style={{ fontSize: 13, color: UI.colors.textSecondary, marginTop: 2 }}>
+                                  @{friend.username}
+                                </Text>
+                              </View>
+                              <Pressable
+                                onPress={() => handleAddFriend(friend)}
+                                disabled={isAdding}
+                                style={{ paddingHorizontal: 14, paddingVertical: 7, borderRadius: 8, backgroundColor: UI.colors.brand, opacity: isAdding ? 0.5 : 1 }}
+                              >
+                                <Text style={{ fontSize: 13, color: "#fff", fontWeight: "600" }}>
+                                  {isAdding ? "Adding…" : "Add"}
+                                </Text>
+                              </Pressable>
+                            </View>
+                          </View>
+                        );
+                      })}
+                    </View>
+                  )}
+                </View>
+              );
+            })()}
+
           </ScrollView>
         </View>
       </Modal>

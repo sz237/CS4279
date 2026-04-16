@@ -190,8 +190,11 @@ export function JoinTripModal({ visible, onClose, onJoined }: Props) {
                   </View>
 
                   <View className="mb-6">
-                    <Text className="text-[10px] font-bold text-neutral-600 uppercase tracking-[0.8px] mb-1.5 ml-1">
+                    <Text className="text-[10px] font-bold text-neutral-600 uppercase tracking-[0.8px] mb-0.5 ml-1">
                       Interests
+                    </Text>
+                    <Text className="text-xs text-zinc-400 mb-1.5 ml-1">
+                      Type interests comma separated
                     </Text>
                     <View className="flex-row items-center bg-zinc-100 rounded-[10px] border border-zinc-300/30 px-3 py-2.5">
                       <TextInput

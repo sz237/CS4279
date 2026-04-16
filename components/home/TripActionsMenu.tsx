@@ -9,7 +9,7 @@ type Props = {
 
 export function TripActionsMenu({ onJoinTrip, onCreateTrip }: Props) {
   return (
-    <View className="mt-8 rounded-2xl bg-white shadow-sm overflow-hidden">
+    <View className="rounded-2xl bg-white shadow-sm overflow-hidden">
       {/* Join a Trip */}
       <Pressable
         onPress={onJoinTrip}

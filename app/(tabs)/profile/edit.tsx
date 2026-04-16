@@ -12,6 +12,7 @@ import {
   Alert,
   Image,
   ScrollView,
+  Switch,
   Text,
   TextInput,
   TouchableOpacity,
@@ -35,6 +36,7 @@ export default function EditProfileScreen() {
   const [username, setUsername] = useState("");
   const [bio, setBio] = useState("");
   const [photoURL, setPhotoURL] = useState("");
+  const [profilePrivacy, setProfilePrivacy] = useState<"public" | "private">("public");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -47,6 +49,7 @@ export default function EditProfileScreen() {
       setUsername(profile?.username ?? "");
       setBio(profile?.bio ?? "");
       setPhotoURL(profile?.photoURL ?? auth.currentUser?.photoURL ?? "");
+      setProfilePrivacy(profile?.profilePrivacy ?? "public");
     })();
   }, []);
 
@@ -62,6 +65,7 @@ export default function EditProfileScreen() {
         username,
         bio,
         photoURL: photoURL || null,
+        profilePrivacy,
       });
       Alert.alert("Saved", "Your profile was updated.");
       router.back();
@@ -237,6 +241,46 @@ export default function EditProfileScreen() {
                 color: UI.colors.textPrimary,
               }}
             />
+          </View>
+
+          {/* Privacy */}
+          <View
+            style={{
+              borderTopWidth: 1,
+              borderTopColor: UI.colors.cardBorder,
+              paddingTop: 16,
+              gap: 4,
+            }}
+          >
+            <Text style={{ fontSize: UI.type.body, fontWeight: "700", color: UI.colors.textPrimary }}>
+              Privacy
+            </Text>
+
+            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 10 }}>
+              <View style={{ flex: 1, paddingRight: 16 }}>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 7, marginBottom: 3 }}>
+                  <Ionicons
+                    name={profilePrivacy === "private" ? "lock-closed" : "globe-outline"}
+                    size={15}
+                    color={profilePrivacy === "private" ? UI.colors.textPrimary : UI.colors.brand}
+                  />
+                  <Text style={{ fontSize: UI.type.body, fontWeight: "600", color: UI.colors.textPrimary }}>
+                    {profilePrivacy === "private" ? "Private Account" : "Public Account"}
+                  </Text>
+                </View>
+                <Text style={{ fontSize: UI.type.caption, color: UI.colors.textMuted, lineHeight: 17 }}>
+                  {profilePrivacy === "private"
+                    ? "Only friends can see your profile and trips."
+                    : "Anyone can find your profile. Friends see your past trips."}
+                </Text>
+              </View>
+              <Switch
+                value={profilePrivacy === "private"}
+                onValueChange={(v) => setProfilePrivacy(v ? "private" : "public")}
+                trackColor={{ false: UI.colors.cardBorder, true: UI.colors.brand }}
+                thumbColor="#FFFFFF"
+              />
+            </View>
           </View>
 
           <TouchableOpacity

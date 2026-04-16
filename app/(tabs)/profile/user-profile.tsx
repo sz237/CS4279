@@ -1,17 +1,17 @@
 import { auth } from "@/src/config/firebase";
+import type { ItineraryModel } from "@/src/models";
 import {
-  ItineraryDoc,
   ProfileUser,
   getFriends,
-  getOwnedItineraries,
+  getMemberItineraries,
   getUserPublicProfile,
 } from "@/src/services/profile";
 import { UI } from "@/src/theme/ui";
+import { TripPreviewCard } from "@/components/trips/TripPreviewCard";
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
 import { Image, ScrollView, Text, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -22,25 +22,11 @@ function initialsFromName(name: string) {
   return `${first}${last}`.toUpperCase();
 }
 
-function tripStatus(trip: ItineraryDoc): "past" | "current" | "upcoming" {
-  if (trip.status) return trip.status as "past" | "current" | "upcoming";
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const start = new Date(trip.startDate + "T00:00:00");
-  const end = new Date(trip.endDate + "T00:00:00");
-  if (end < today) return "past";
-  if (start <= today) return "current";
-  return "upcoming";
-}
-
-function formatDateRange(start: string, end: string) {
-  const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-  const s = new Date(start + "T00:00:00");
-  const e = new Date(end + "T00:00:00");
-  if (s.getMonth() === e.getMonth() && s.getFullYear() === e.getFullYear()) {
-    return `${MONTHS[s.getMonth()]} ${s.getDate()}–${e.getDate()}, ${s.getFullYear()}`;
-  }
-  return `${MONTHS[s.getMonth()]} ${s.getDate()} – ${MONTHS[e.getMonth()]} ${e.getDate()}, ${e.getFullYear()}`;
+function tripStatus(trip: ItineraryModel): "past" | "current" | "upcoming" {
+  const today = new Date().toISOString().slice(0, 10); // "YYYY-MM-DD"
+  if (today < trip.startDate) return "upcoming";
+  if (today > trip.endDate) return "past";
+  return "current";
 }
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
@@ -57,66 +43,15 @@ function Avatar({ name, photoURL, size = 88 }: { name: string; photoURL?: string
   );
 }
 
-function StatusBadge({ status }: { status: "past" | "current" | "upcoming" }) {
-  const config = {
-    past:     { label: "Past",     bg: "#F3F4F6", color: "#6B7280" },
-    current:  { label: "Current",  bg: "#DCFCE7", color: "#15803D" },
-    upcoming: { label: "Upcoming", bg: "#EEF2FF", color: UI.colors.brand },
-  }[status];
-
-  return (
-    <View style={{ backgroundColor: config.bg, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3, alignSelf: "flex-start" }}>
-      <Text style={{ fontSize: 11, fontWeight: "700", color: config.color }}>{config.label}</Text>
-    </View>
-  );
-}
-
-function TripCard({ trip }: { trip: ItineraryDoc }) {
-  const status = tripStatus(trip);
-  return (
-    <View style={{
-      backgroundColor: UI.colors.cardBg,
-      borderColor: UI.colors.cardBorder,
-      borderWidth: 1,
-      borderRadius: UI.radius.card,
-      padding: 14,
-      marginBottom: 10,
-      ...UI.shadow.card,
-    }}>
-      <View style={{ flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 6 }}>
-        <Text style={{ flex: 1, fontSize: 15, fontWeight: "700", color: UI.colors.textPrimary, marginRight: 8 }} numberOfLines={1}>
-          {trip.title}
-        </Text>
-        <StatusBadge status={status} />
-      </View>
-
-      {!!trip.cityOrArea && (
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginBottom: 4 }}>
-          <Ionicons name="location-outline" size={13} color={UI.colors.textMuted} />
-          <Text style={{ fontSize: 13, color: UI.colors.textSecondary }}>{trip.cityOrArea}</Text>
-        </View>
-      )}
-
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-        <Ionicons name="calendar-outline" size={13} color={UI.colors.textMuted} />
-        <Text style={{ fontSize: 13, color: UI.colors.textSecondary }}>
-          {formatDateRange(trip.startDate, trip.endDate)}
-        </Text>
-      </View>
-    </View>
-  );
-}
-
 // ─── Screen ──────────────────────────────────────────────────────────────────
 
 export default function UserProfileScreen() {
   const { uid } = useLocalSearchParams<{ uid: string }>();
-  const insets = useSafeAreaInsets();
   const currentUid = auth.currentUser?.uid ?? "";
 
   const [profile, setProfile] = useState<ProfileUser | null>(null);
   const [friendCount, setFriendCount] = useState(0);
-  const [trips, setTrips] = useState<ItineraryDoc[]>([]);
+  const [trips, setTrips] = useState<ItineraryModel[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -127,22 +62,51 @@ export default function UserProfileScreen() {
         const [p, friends, allTrips] = await Promise.all([
           getUserPublicProfile(uid),
           getFriends(uid),
-          getOwnedItineraries(uid),
+          getMemberItineraries(uid),
         ]);
 
         setProfile(p);
         setFriendCount(friends.length);
 
-        // Filter trips: always show past; current/upcoming only if invited
+        const isSelf = currentUid === uid;
+        const isFriend = friends.some((f) => f.uid === currentUid);
+
+        // Block entirely if the profile is private and viewer isn't a friend
+        if (!isSelf && !isFriend && p?.profilePrivacy === "private") {
+          setTrips([]);
+          return;
+        }
+
+        // Trip visibility rules (checked against the profile owner's uid):
+        //   - You always see your own trips
+        //   - Members of the trip always see it regardless of privacy
+        //   - "public" → anyone can see (past trips only)
+        //   - "friends" → only friends can see (past trips only, default)
+        //   - "private" / "only you" → hidden from everyone except self/members
         const visible = allTrips.filter((t) => {
-          const status = tripStatus(t);
-          if (status === "past") return true;
-          return (t.memberUids ?? []).includes(currentUid);
+          if (isSelf) return true;
+          const isMember = (t.memberUids ?? []).includes(currentUid);
+          if (isMember) return true;
+          const ownerPrivacy = (t.memberPrivacy?.[uid] as "public" | "friends" | "private") ?? "friends";
+          if (ownerPrivacy === "private") return false;
+          if (ownerPrivacy === "public") return tripStatus(t) === "past";
+          if (isFriend && ownerPrivacy === "friends") return tripStatus(t) === "past";
+          return false;
         });
 
-        // Sort: current → upcoming → past
-        const order = { current: 0, upcoming: 1, past: 2 };
-        visible.sort((a, b) => order[tripStatus(a)] - order[tripStatus(b)]);
+        // Sort: upcoming → current → past
+        // Within upcoming: soonest startDate first (ascending)
+        // Within current: ending soonest first (ascending endDate)
+        // Within past: most recent first (descending startDate)
+        const groupOrder = { upcoming: 0, current: 1, past: 2 };
+        visible.sort((a, b) => {
+          const sa = tripStatus(a);
+          const sb = tripStatus(b);
+          if (sa !== sb) return groupOrder[sa] - groupOrder[sb];
+          if (sa === "past") return b.startDate.localeCompare(a.startDate);
+          if (sa === "current") return a.endDate.localeCompare(b.endDate);
+          return a.startDate.localeCompare(b.startDate); // upcoming
+        });
         setTrips(visible);
       } finally {
         setLoading(false);
@@ -166,6 +130,11 @@ export default function UserProfileScreen() {
     );
   }
 
+  const isPrivateAndBlocked = !!(
+    profile.profilePrivacy === "private" &&
+    currentUid !== uid &&
+    trips.length === 0
+  );
   const pastTrips = trips.filter((t) => tripStatus(t) === "past");
   const activeTrips = trips.filter((t) => tripStatus(t) !== "past");
 
@@ -204,32 +173,48 @@ export default function UserProfileScreen() {
       </View>
       <View style={{ height: 1, backgroundColor: UI.colors.cardBorder }} />
 
-      {/* ── Active trips (invited only) ── */}
-      {activeTrips.length > 0 && (
+      {/* ── Private account gate ── */}
+      {isPrivateAndBlocked ? (
+        <View style={{ alignItems: "center", paddingVertical: 40, gap: 10, marginTop: 8 }}>
+          <View style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: "#F3F4F6", alignItems: "center", justifyContent: "center" }}>
+            <Ionicons name="lock-closed" size={24} color="#9CA3AF" />
+          </View>
+          <Text style={{ fontSize: 15, fontWeight: "700", color: UI.colors.textPrimary }}>
+            Private Account
+          </Text>
+          <Text style={{ fontSize: 13, color: UI.colors.textMuted, textAlign: "center", maxWidth: 220 }}>
+            Add {profile.displayName} as a friend to see their trips.
+          </Text>
+        </View>
+      ) : null}
+
+      {/* ── Active trips ── */}
+      {!isPrivateAndBlocked && activeTrips.length > 0 && (
         <View style={{ marginTop: 24 }}>
           <Text style={{ fontSize: 11, fontWeight: "600", color: UI.colors.textMuted, textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 }}>
             Active Trips
           </Text>
-          {activeTrips.map((t) => <TripCard key={t.id} trip={t} />)}
+          {activeTrips.map((t) => <TripPreviewCard key={t.id} trip={{ ...t, status: tripStatus(t) }} />)}
         </View>
       )}
 
       {/* ── Past trips ── */}
-      <View style={{ marginTop: activeTrips.length > 0 ? 16 : 24 }}>
-        <Text style={{ fontSize: 11, fontWeight: "600", color: UI.colors.textMuted, textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 }}>
-          Past Trips
-        </Text>
-        {pastTrips.length === 0 ? (
-          <View className="items-center py-8 gap-2">
-            <Ionicons name="map-outline" size={36} color="#D1D5DB" />
-            <Text style={{ fontSize: 14, color: UI.colors.textMuted, textAlign: "center" }}>
-              No past trips yet.
-            </Text>
-          </View>
-        ) : (
-          pastTrips.map((t) => <TripCard key={t.id} trip={t} />)
-        )}
-      </View>
+      {!isPrivateAndBlocked && (
+        <View style={{ marginTop: activeTrips.length > 0 ? 16 : 24 }}>
+          <Text style={{ fontSize: 11, fontWeight: "600", color: UI.colors.textMuted, textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 }}>
+            Past Trips
+          </Text>
+          {pastTrips.length === 0 ? (
+            <View style={{ alignItems: "center", paddingVertical: 32, gap: 8 }}>
+              <Text style={{ fontSize: 14, color: UI.colors.textMuted, textAlign: "center" }}>
+                No past trips yet.
+              </Text>
+            </View>
+          ) : (
+            pastTrips.map((t) => <TripPreviewCard key={t.id} trip={{ ...t, status: tripStatus(t) }} />)
+          )}
+        </View>
+      )}
     </ScrollView>
   );
 }

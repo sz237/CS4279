@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useCallback, useMemo, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   Modal,
   Pressable,
@@ -24,8 +25,10 @@ import { CommuteConnector } from "@/components/itinerary/CommuteConnector";
 import DayTabs from "@/components/itinerary/DayTabs";
 import { TripDatePicker } from "@/components/TripDatePicker";
 import { useAddTripContext } from "@/context/AddTripContext";
+import { useTrips } from "@/context/TripsContext";
 import type { TripStop } from "@/lib/trips";
 import { openStopInGoogleMaps } from "@/lib/trips";
+import { useRouter } from "expo-router";
 import { estimateTravelMinutes } from "@/services/routeService";
 import type { AIActivityStop } from "@/services/types";
 import { saveAiItinerary } from "@/src/services/trips";
@@ -43,6 +46,8 @@ const AI_SLOTS = [
 
 export default function AddTripScreen() {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
+  const { selectTrip } = useTrips();
   const [formExpanded, setFormExpanded] = useState(false);
   const [pendingExtraStop, setPendingExtraStop] = useState<TripStop | null>(null);
 
@@ -134,18 +139,24 @@ export default function AddTripScreen() {
     [selectedAiDayIdx, setAiDays]
   );
 
+  const [saving, setSaving] = useState(false);
+
   const handleSaveToFirebase = useCallback(async () => {
-    if (!aiDays) return;
+    if (!aiDays || saving) return;
+    setSaving(true);
     try {
-      await saveAiItinerary(
+      const tripId = await saveAiItinerary(
         { cityOrArea, radiusMiles: Number(radiusMiles) || undefined, startDate, endDate, interests },
         aiDays
       );
       resetForm();
+      selectTrip(tripId);
+      router.push({ pathname: "/(tabs)/itinerary/overview", params: { from: "addTrip" } });
     } catch (e: any) {
       Alert.alert("Save failed", e?.message ?? "Unknown error");
+      setSaving(false);
     }
-  }, [aiDays, cityOrArea, radiusMiles, startDate, endDate, interests, resetForm]);
+  }, [aiDays, saving, cityOrArea, radiusMiles, startDate, endDate, interests, resetForm, selectTrip, router]);
 
   const renderFlatItem = useCallback(
     ({ item, drag, isActive, getIndex }: RenderItemParams<FlatItem>) => {
@@ -197,7 +208,7 @@ export default function AddTripScreen() {
     interestsRaw, setInterestsRaw,
     formatDateRange,
     onListPress: () => { setFormExpanded(false); generate(); },
-    onAiPress: generateAiItinerary,
+    onAiPress: () => { setFormExpanded(false); generateAiItinerary(); },
     listBusy: busy,
     aiBusy: aiItinBusy,
   };
@@ -212,8 +223,9 @@ export default function AddTripScreen() {
             <CollapsedTripHeader
               destination={cityOrArea}
               dateRange={formatDateRange(startDate, endDate)}
-              onEdit={() => setAiDays(null)}
+              onEdit={() => setFormExpanded((v) => !v)}
             />
+            {formExpanded && <TripForm {...tripFormProps} />}
           </View>
 
           <View style={{ backgroundColor: "white", borderBottomWidth: 1, borderBottomColor: "#E5E7EB", paddingVertical: 8 }}>
@@ -261,8 +273,16 @@ export default function AddTripScreen() {
             <TouchableOpacity onPress={exportAiRoute} activeOpacity={0.7}>
               <Text className="text-sm font-semibold text-gray-500">Export Route</Text>
             </TouchableOpacity>
-            <TouchableOpacity onPress={handleSaveToFirebase} activeOpacity={0.88} className="bg-violet-600 rounded-full px-5 py-2.5">
-              <Text className="text-sm font-bold text-white">Save Itinerary</Text>
+            <TouchableOpacity
+              onPress={handleSaveToFirebase}
+              disabled={saving}
+              activeOpacity={0.88}
+              className={`rounded-full px-5 py-2.5 flex-row items-center gap-2 ${saving ? "bg-violet-400" : "bg-violet-600"}`}
+            >
+              {saving && <ActivityIndicator size="small" color="#FFFFFF" />}
+              <Text className="text-sm font-bold text-white">
+                {saving ? "Saving…" : "Save Itinerary"}
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -318,16 +338,17 @@ export default function AddTripScreen() {
 
       ) : (
         /* ── Initial Form View ──────────────────────────────────────────── */
-        <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 28 }} showsVerticalScrollIndicator={false}>
-          <View style={{ paddingTop: insets.top + 16 }}>
+        <ScrollView className="flex-1 bg-white" contentContainerStyle={{ paddingBottom: 28 }} showsVerticalScrollIndicator={false}>
+          <View style={{ paddingTop: insets.top + 16, backgroundColor: "white" }}>
             <TripForm {...tripFormProps} showTitle />
           </View>
 
           <View className="items-center pt-[28px] px-8">
-            <Text className="text-[36px] font-extrabold text-zinc-900 text-center leading-[44px]">
-              Your Journey{"\n"}Awaits
+            <Ionicons name="binoculars-outline" size={48} color="#E5E7EB" />
+            <Text style={{ marginTop: 12, fontSize: 16, fontWeight: "500", color: "#9CA3AF", textAlign: "center" }}>
+              Your Journey Awaits
             </Text>
-            <Text className="mt-4 text-lg font-medium text-neutral-600 text-center leading-7">
+            <Text style={{ marginTop: 4, fontSize: 14, color: "#D1D5DB", textAlign: "center" }}>
               Enter your preferences and we'll curate the best spots just for you.
             </Text>
           </View>

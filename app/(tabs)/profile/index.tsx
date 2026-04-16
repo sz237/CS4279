@@ -12,7 +12,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "expo-router";
 import { signOut } from "firebase/auth";
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import {
   Alert,
   Image,
@@ -125,14 +125,15 @@ export default function ProfileScreen() {
   const router = useRouter();
 
   const [profile, setProfile] = useState<ProfileUser | null>(null);
-  const [friends, setFriends] = useState<FriendItem[]>([]);
+  const [friends, setFriends] = useState<FriendItem[] | null>(null);
   const [pendingRequests, setPendingRequests] = useState<FriendRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [localPhotoURL, setLocalPhotoURL] = useState<string | null>(null);
+  const initialized = useRef(false);
 
   const loadProfile = useCallback(async () => {
     try {
-      setLoading(true);
+      if (!initialized.current) setLoading(true);
       const p = await getCurrentUserProfile();
       setProfile(p);
 
@@ -145,11 +146,12 @@ export default function ProfileScreen() {
         setFriends(friendsList);
         setPendingRequests(requestsList);
       } else {
-        setFriends([]);
+        setFriends(null);
         setPendingRequests([]);
       }
 
       setLocalPhotoURL(p?.photoURL ?? auth.currentUser?.photoURL ?? null);
+      initialized.current = true;
     } catch (error: any) {
       Alert.alert("Profile Error", error?.message ?? "Could not load profile.");
     } finally {
@@ -186,7 +188,7 @@ export default function ProfileScreen() {
       >
 
         {/* ── Page header ── */}
-        <Text style={{ fontSize: UI.type.pageTitle, fontWeight: "800", color: UI.colors.textPrimary, marginBottom: 20 }}>
+        <Text style={{ fontSize: 24, fontWeight: "600", color: UI.colors.textPrimary, marginBottom: 20 }}>
           Profile
         </Text>
 
@@ -237,9 +239,11 @@ export default function ProfileScreen() {
               <Text style={{ fontSize: 15, fontWeight: "700", color: UI.colors.textPrimary }}>
                 Friends
               </Text>
-              <Text style={{ fontSize: 15, fontWeight: "600", color: UI.colors.textSecondary }}>
-                {friends.length}
-              </Text>
+              {friends !== null && (
+                <Text style={{ fontSize: 15, fontWeight: "600", color: UI.colors.textSecondary }}>
+                  {friends.length}
+                </Text>
+              )}
             </View>
 
             {/* Request tag, right side */}

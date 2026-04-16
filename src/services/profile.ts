@@ -1,4 +1,5 @@
 import { auth, db } from "@/src/config/firebase";
+import type { ItineraryModel } from "@/src/models";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { updateProfile as updateAuthProfile } from "firebase/auth";
 import {
@@ -22,6 +23,7 @@ export type ProfileUser = {
   photoURL: string | null;
   photoPath: string | null;
   bio: string | null;
+  profilePrivacy?: "public" | "private";
 };
 
 export type FriendItem = {
@@ -106,6 +108,7 @@ export async function getCurrentUserProfile(): Promise<ProfileUser | null> {
     photoURL: data.photoURL ?? current.photoURL ?? null,
     photoPath: data.photoPath ?? null,
     bio: data.bio ?? null,
+    profilePrivacy: data.profilePrivacy ?? "public",
   };
 }
 
@@ -114,6 +117,7 @@ export async function updateCurrentUserProfile(params: {
   username: string;
   bio: string;
   photoURL: string | null;
+  profilePrivacy?: "public" | "private";
 }) {
   const current = auth.currentUser;
   if (!current) throw new Error("You must be signed in.");
@@ -122,6 +126,7 @@ export async function updateCurrentUserProfile(params: {
   const username = normalizeUsername(params.username);
   const bio = params.bio.trim() || null;
   const photoURL = params.photoURL?.trim() ? params.photoURL.trim() : null;
+  const profilePrivacy = params.profilePrivacy ?? "public";
 
   if (!displayName) throw new Error("Display name is required.");
   if (!username) throw new Error("Username is required.");
@@ -154,6 +159,7 @@ export async function updateCurrentUserProfile(params: {
         photoURL,
         photoPath: existing?.photoPath ?? null,
         bio,
+        profilePrivacy,
       },
       { merge: true }
     );
@@ -177,6 +183,7 @@ export async function updateCurrentUserProfile(params: {
         photoURL,
         photoPath: existing?.photoPath ?? null,
         bio,
+        profilePrivacy,
       },
       { merge: true }
     );
@@ -201,6 +208,7 @@ export async function getUserPublicProfile(uid: string): Promise<ProfileUser | n
     photoURL: data.photoURL ?? null,
     photoPath: data.photoPath ?? null,
     bio: data.bio ?? null,
+    profilePrivacy: data.profilePrivacy ?? "public",
   };
 }
 
@@ -308,11 +316,16 @@ export async function getOwnedItineraries(uid: string): Promise<ItineraryDoc[]> 
 
   return snap.docs.map((d) => {
     const x = d.data() as Omit<ItineraryDoc, "id">;
-    return {
-      id: d.id,
-      ...x,
-    };
+    return { id: d.id, ...x };
   });
+}
+
+/** Fetch all itineraries a user is a member of (owned or joined). */
+export async function getMemberItineraries(uid: string): Promise<ItineraryModel[]> {
+  const q = query(collection(db, "itineraries"), where("memberUids", "array-contains", uid));
+  const snap = await getDocs(q);
+
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as ItineraryModel));
 }
 
 export async function deleteOwnedItineraries(itineraryIds: string[]) {

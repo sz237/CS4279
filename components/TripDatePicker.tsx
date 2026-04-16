@@ -65,9 +65,7 @@ export function TripDatePicker({
   const today = useMemo(() => stripTime(new Date()), []);
   const min = minDate ? stripTime(minDate) : today;
 
-  const [tripType, setTripType] = useState<TripType>(
-    initialReturn ? "multi-day" : "one-day"
-  );
+  const [tripType, setTripType] = useState<TripType>("multi-day");
   const [departDate, setDepartDate] = useState<Date | null>(
     initialDeparture ? stripTime(initialDeparture) : null
   );
